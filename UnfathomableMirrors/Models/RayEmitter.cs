@@ -5,7 +5,6 @@ using System.Windows.Media;
 
 namespace UnfathomableMirrors.Models
 {
-    // OPTIMIZACIÓN 1: Convertido a 'struct' para eliminar el Garbage Collection en tiempo real
     public struct RaySegment
     {
         public Point Start { get; set; }
@@ -23,17 +22,16 @@ namespace UnfathomableMirrors.Models
         public Point Position { get; set; }
         public double Angle { get; private set; }
         public SolidColorBrush RayColor { get; private set; }
+        public double Wavelength { get; set; }
         public double DispersionModifier { get; private set; }
-
-        // Asignación de capacidad inicial para evitar redimensionado de arrays
         public List<RaySegment> Segments { get; private set; } = new List<RaySegment>(25);
 
         private const double MaxRayLength = 2000;
         private const int MaxBounces = 25;
 
-        public RayEmitter(int id, int groupId, double x, double y, SolidColorBrush color, double angleDegrees = 0, double dispersion = 0)
+        public RayEmitter(int id, int groupId, double x, double y, SolidColorBrush color, double angleDegrees = 0, double wavelength = 550, double dispersion = 0)
         {
-            Id = id; GroupId = groupId; Position = new Point(x, y); RayColor = color; SetAngleDegrees(angleDegrees); DispersionModifier = dispersion;
+            Id = id; GroupId = groupId; Position = new Point(x, y); RayColor = color; SetAngleDegrees(angleDegrees); Wavelength = wavelength; DispersionModifier = dispersion;
         }
 
         public void MoveTo(Point newPos) => Position = newPos;

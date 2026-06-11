@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,6 +12,34 @@ using UnfathomableMirrors.Models;
 
 namespace UnfathomableMirrors.Views
 {
+    public class SurfaceDto
+    {
+        public string Type { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Angle { get; set; }
+        public double Radius { get; set; }
+        public double Length { get; set; }
+        public double Thickness { get; set; }
+        public double RefractiveIndex { get; set; }
+    }
+    public class EmitterDto
+    {
+        public int Id { get; set; }
+        public int GroupId { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double AngleDegrees { get; set; }
+        public double Wavelength { get; set; }
+        public double DispersionModifier { get; set; }
+        public string ColorHex { get; set; }
+    }
+    public class SceneDto
+    {
+        public List<SurfaceDto> Surfaces { get; set; } = new List<SurfaceDto>();
+        public List<EmitterDto> Emitters { get; set; } = new List<EmitterDto>();
+    }
+
     public partial class MainWindow : Window
     {
         private List<RayEmitter> emitters = new List<RayEmitter>();
@@ -22,18 +51,39 @@ namespace UnfathomableMirrors.Views
         private int rayCounter = 1;
         private int groupCounter = 1;
         private int colorIndex = 0;
+        private bool isMeasuring = false;
+        private Point? measureStart = null;
         private SolidColorBrush[] rayColors = { Brushes.Blue, Brushes.Green, Brushes.DarkOrange, Brushes.Purple, Brushes.Teal, Brushes.Magenta, Brushes.DeepPink, Brushes.DarkCyan, Brushes.Indigo };
 
         public MainWindow()
         {
             InitializeComponent();
             surfaces.Add(new BiconvexLens(250, 100, 1.5) { Position = new Point(700, 300) });
-            emitters.Add(new RayEmitter(rayCounter++, groupCounter++, 200, 300, GetNextColor(), angleDegrees: 0));
+            emitters.Add(new RayEmitter(rayCounter++, groupCounter++, 200, 300, WavelengthToBrush(550), 0, 550, 0));
             Loaded += (s, e) => UpdateAndDraw();
             SizeChanged += (s, e) => UpdateAndDraw();
         }
 
         private SolidColorBrush GetNextColor() => rayColors[colorIndex++ % rayColors.Length];
+
+        private SolidColorBrush WavelengthToBrush(double wavelength)
+        {
+            double r = 0, g = 0, b = 0;
+            if (wavelength >= 380 && wavelength < 440) { r = -(wavelength - 440) / (440 - 380); b = 1; }
+            else if (wavelength >= 440 && wavelength < 490) { g = (wavelength - 440) / (490 - 440); b = 1; }
+            else if (wavelength >= 490 && wavelength < 510) { g = 1; b = -(wavelength - 510) / (510 - 490); }
+            else if (wavelength >= 510 && wavelength < 580) { r = (wavelength - 510) / (580 - 510); g = 1; }
+            else if (wavelength >= 580 && wavelength < 645) { r = 1; g = -(wavelength - 645) / (645 - 580); }
+            else if (wavelength >= 645 && wavelength <= 750) { r = 1; }
+
+            double factor = 1.0;
+            if (wavelength >= 380 && wavelength < 420) factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380);
+            else if (wavelength >= 700 && wavelength <= 750) factor = 0.3 + 0.7 * (750 - wavelength) / (750 - 700);
+
+            return new SolidColorBrush(Color.FromRgb((byte)(r * factor * 255), (byte)(g * factor * 255), (byte)(b * factor * 255)));
+        }
+
+        private double WavelengthToDispersion(double wavelength) => (550.0 - wavelength) * 0.0002;
 
         private void UpdateAndDraw()
         {
@@ -53,11 +103,8 @@ namespace UnfathomableMirrors.Views
             {
                 ray.UpdatePhysics(surfaces);
                 int hitOrder = 1;
+                bool isPrimaryRay = ray.DispersionModifier == 0.0 || ray.Id == emitters.Find(r => r.GroupId == ray.GroupId).Id;
 
-                // OPTIMIZACIÓN 3: Determina si es el rayo central base para renderizar textos y data
-                bool isPrimaryRay = ray.DispersionModifier == 0.0;
-
-                // OPTIMIZACIÓN 2: Usa una única línea (Polyline) en lugar de crear un objeto por segmento
                 PointCollection pathPoints = new PointCollection();
                 if (ray.Segments.Count > 0) pathPoints.Add(ray.Segments[0].Start);
 
@@ -67,7 +114,7 @@ namespace UnfathomableMirrors.Views
 
                     if (segment.IsHitting && isPrimaryRay)
                     {
-                        dataExport.Add(new { RayGrp = ray.GroupId, Bounce = hitOrder++, Action = segment.ActionType, Angle = Math.Round(segment.IncidenceAngleDeg, 2) + "°" });
+                        dataExport.Add(new { RayGrp = ray.GroupId, Wave = (int)ray.Wavelength + "nm", Bounce = hitOrder++, Action = segment.ActionType, Angle = Math.Round(segment.IncidenceAngleDeg, 1) + "°" });
 
                         if (showGuides) SimCanvas.Children.Add(new Line { X1 = segment.End.X, Y1 = segment.End.Y, X2 = segment.NormalEnd.X, Y2 = segment.NormalEnd.Y, Stroke = Brushes.Gray, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 2, 4 } });
 
@@ -77,8 +124,7 @@ namespace UnfathomableMirrors.Views
                     }
                 }
 
-                Polyline rayPath = new Polyline { Points = pathPoints, Stroke = ray.RayColor, StrokeThickness = 2 };
-                SimCanvas.Children.Add(rayPath);
+                SimCanvas.Children.Add(new Polyline { Points = pathPoints, Stroke = ray.RayColor, StrokeThickness = 2 });
 
                 if (ray.Id == emitters.Find(r => r.GroupId == ray.GroupId).Id)
                 {
@@ -91,6 +137,13 @@ namespace UnfathomableMirrors.Views
             }
 
             PhysicsDataTable.ItemsSource = dataExport;
+
+            if (isMeasuring && measureStart != null)
+            {
+                Ellipse marker = new Ellipse { Width = 8, Height = 8, Fill = Brushes.Purple };
+                Canvas.SetLeft(marker, measureStart.Value.X - 4); Canvas.SetTop(marker, measureStart.Value.Y - 4);
+                SimCanvas.Children.Add(marker);
+            }
 
             if ((activeEmitter != null || activeSurface != null) && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
             {
@@ -105,8 +158,7 @@ namespace UnfathomableMirrors.Views
             {
                 EllipseGeometry e1 = new EllipseGeometry(lens.C1, lens.Radius, lens.Radius);
                 EllipseGeometry e2 = new EllipseGeometry(lens.C2, lens.Radius, lens.Radius);
-                Path path = new Path { Data = new CombinedGeometry(GeometryCombineMode.Intersect, e1, e2), Fill = new SolidColorBrush(Color.FromArgb(80, 0, 200, 255)), Stroke = Brushes.DarkBlue, StrokeThickness = 2 };
-                SimCanvas.Children.Add(path);
+                SimCanvas.Children.Add(new Path { Data = new CombinedGeometry(GeometryCombineMode.Intersect, e1, e2), Fill = new SolidColorBrush(Color.FromArgb(80, 0, 200, 255)), Stroke = Brushes.DarkBlue, StrokeThickness = 2 });
             }
             else if (surface is RefractionBlock block)
             {
@@ -142,7 +194,6 @@ namespace UnfathomableMirrors.Views
             double index = double.TryParse(IndexInput.Text.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out double n) ? n : 1.5;
 
             string sel = ((ComboBoxItem)SurfaceSelector.SelectedItem).Content.ToString();
-
             if (sel == "Curved Mirror") surfaces.Add(new CurvedMirror(radius, length) { Position = new Point(400, 250) });
             else if (sel == "Straight Mirror") surfaces.Add(new StraightMirror(length) { Position = new Point(400, 250) });
             else if (sel == "Refraction Block") surfaces.Add(new RefractionBlock(length, thickness, index) { Position = new Point(400, 250) });
@@ -150,20 +201,64 @@ namespace UnfathomableMirrors.Views
             UpdateAndDraw();
         }
 
-        private void AddRay_Click(object sender, RoutedEventArgs e) { emitters.Add(new RayEmitter(rayCounter++, groupCounter++, 100, 100, GetNextColor())); UpdateAndDraw(); }
+        private void AddRay_Click(object sender, RoutedEventArgs e)
+        {
+            double w = WavelengthSlider.Value;
+            emitters.Add(new RayEmitter(rayCounter++, groupCounter++, 100, 100, WavelengthToBrush(w), 0, w, WavelengthToDispersion(w)));
+            UpdateAndDraw();
+        }
 
         private void AddWhiteLight_Click(object sender, RoutedEventArgs e)
         {
-            SolidColorBrush[] c = { Brushes.Red, Brushes.Orange, Brushes.LimeGreen, Brushes.DodgerBlue, Brushes.DarkViolet };
-            double[] d = { -0.04, -0.02, 0.0, 0.02, 0.04 }; // La dispersión de la luz
+            double[] wavelengths = { 400, 470, 550, 610, 700 };
             int grp = groupCounter++;
-            for (int i = 0; i < c.Length; i++) emitters.Add(new RayEmitter(rayCounter++, grp, 100, 150, c[i], 0, d[i]));
+            for (int i = 0; i < wavelengths.Length; i++)
+            {
+                double w = wavelengths[i];
+                emitters.Add(new RayEmitter(rayCounter++, grp, 100, 150, WavelengthToBrush(w), 0, w, WavelengthToDispersion(w)));
+            }
+            UpdateAndDraw();
+        }
+
+        private void AddLamp_Click(object sender, RoutedEventArgs e)
+        {
+            double w = WavelengthSlider.Value;
+            int grp = groupCounter++;
+            for (int i = 0; i < 360; i += 15) emitters.Add(new RayEmitter(rayCounter++, grp, 200, 300, WavelengthToBrush(w), i, w, WavelengthToDispersion(w)));
+            UpdateAndDraw();
+        }
+
+        private void AddLaserBeam_Click(object sender, RoutedEventArgs e)
+        {
+            double w = WavelengthSlider.Value;
+            int grp = groupCounter++;
+            for (int i = -30; i <= 30; i += 10) emitters.Add(new RayEmitter(rayCounter++, grp, 200, 300 + i, WavelengthToBrush(w), 0, w, WavelengthToDispersion(w)));
+            UpdateAndDraw();
+        }
+
+        private void ToggleRuler_Click(object sender, RoutedEventArgs e)
+        {
+            isMeasuring = !isMeasuring; measureStart = null;
+            MeasureLabel.Text = isMeasuring ? "Ruler Active" : "";
+            UpdateAndDraw();
+        }
+
+        private void HandleMeasurement(Point clickPos)
+        {
+            if (measureStart == null) { measureStart = clickPos; MeasureLabel.Text = "P1 Set. Click P2."; }
+            else
+            {
+                double distance = Math.Round(Math.Sqrt(Math.Pow(clickPos.X - measureStart.Value.X, 2) + Math.Pow(clickPos.Y - measureStart.Value.Y, 2)), 1);
+                MeasureLabel.Text = $"Dist: {distance} px";
+                measureStart = null; isMeasuring = false;
+            }
             UpdateAndDraw();
         }
 
         private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             mousePos = e.GetPosition(SimCanvas);
+            if (isMeasuring) { HandleMeasurement(mousePos); return; }
             if (e.ChangedButton == MouseButton.Right)
             {
                 var toDelete = emitters.Find(r => r.IsMouseOver(mousePos));
@@ -196,6 +291,59 @@ namespace UnfathomableMirrors.Views
         private void Canvas_MouseUp(object sender, MouseButtonEventArgs e) { activeEmitter = null; activeSurface = null; UpdateAndDraw(); }
         private void NumberValidation(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
         private void ShowGuides_Click(object sender, RoutedEventArgs e) => UpdateAndDraw();
-        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING ('A')" : "Mode: AIMING ('A')"; UpdateAndDraw(); } }
+        private void WavelengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (WavelengthLabel != null) WavelengthLabel.Text = $"{(int)WavelengthSlider.Value} nm"; }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING" : "Mode: AIMING"; ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson; UpdateAndDraw(); }
+        }
+
+        private void Save_Click(object sender, RoutedEventArgs e)
+        {
+            var sfd = new Microsoft.Win32.SaveFileDialog { Filter = "JSON Files (*.json)|*.json", FileName = "scene.json" };
+            if (sfd.ShowDialog() == true)
+            {
+                var dto = new SceneDto();
+                foreach (var s in surfaces)
+                {
+                    var sd = new SurfaceDto { X = s.Position.X, Y = s.Position.Y, Angle = s.Angle, RefractiveIndex = s.RefractiveIndex };
+                    if (s is CurvedMirror cm) { sd.Type = "CurvedMirror"; sd.Radius = cm.Radius; sd.Length = cm.Length; }
+                    else if (s is StraightMirror sm) { sd.Type = "StraightMirror"; sd.Length = sm.Length; }
+                    else if (s is RefractionBlock rb) { sd.Type = "RefractionBlock"; sd.Length = rb.Length; sd.Thickness = rb.Thickness; }
+                    else if (s is BiconvexLens bl) { sd.Type = "BiconvexLens"; sd.Radius = bl.Radius; sd.Thickness = bl.Thickness; }
+                    dto.Surfaces.Add(sd);
+                }
+                foreach (var em in emitters) dto.Emitters.Add(new EmitterDto { Id = em.Id, GroupId = em.GroupId, X = em.Position.X, Y = em.Position.Y, AngleDegrees = em.Angle * 180.0 / Math.PI, Wavelength = em.Wavelength, DispersionModifier = em.DispersionModifier, ColorHex = em.RayColor.Color.ToString() });
+                System.IO.File.WriteAllText(sfd.FileName, JsonSerializer.Serialize(dto));
+            }
+        }
+
+        private void Load_Click(object sender, RoutedEventArgs e)
+        {
+            var ofd = new Microsoft.Win32.OpenFileDialog { Filter = "JSON Files (*.json)|*.json" };
+            if (ofd.ShowDialog() == true)
+            {
+                try
+                {
+                    var dto = JsonSerializer.Deserialize<SceneDto>(System.IO.File.ReadAllText(ofd.FileName));
+                    if (dto == null) return;
+                    surfaces.Clear(); emitters.Clear();
+                    foreach (var s in dto.Surfaces)
+                    {
+                        IOpticSurface surf = null;
+                        if (s.Type == "CurvedMirror") surf = new CurvedMirror(s.Radius, s.Length);
+                        else if (s.Type == "StraightMirror") surf = new StraightMirror(s.Length);
+                        else if (s.Type == "RefractionBlock") surf = new RefractionBlock(s.Length, s.Thickness, s.RefractiveIndex);
+                        else if (s.Type == "BiconvexLens") surf = new BiconvexLens(s.Radius, s.Thickness, s.RefractiveIndex);
+                        if (surf != null) { surf.Position = new Point(s.X, s.Y); surf.Angle = s.Angle; surfaces.Add(surf); }
+                    }
+                    foreach (var em in dto.Emitters) emitters.Add(new RayEmitter(em.Id, em.GroupId, em.X, em.Y, new SolidColorBrush((Color)ColorConverter.ConvertFromString(em.ColorHex)), em.AngleDegrees, em.Wavelength, em.DispersionModifier));
+                    rayCounter = emitters.Count > 0 ? emitters[emitters.Count - 1].Id + 1 : 1;
+                    groupCounter = emitters.Count > 0 ? emitters[emitters.Count - 1].GroupId + 1 : 1;
+                    UpdateAndDraw();
+                }
+                catch (Exception ex) { MessageBox.Show("Error loading: " + ex.Message); }
+            }
+        }
     }
 }
