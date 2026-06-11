@@ -1,4 +1,4 @@
-﻿<Window x:Class="UnfathomableMirrors.MainWindow"
+﻿<Window x:Class="UnfathomableMirrors.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Unfathomable Mirrors" Height="750" Width="1100"

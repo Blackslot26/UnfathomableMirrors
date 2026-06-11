@@ -1,11 +1,13 @@
-﻿using System.Windows;
+﻿using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using System.Text.RegularExpressions; // NEW: Required to filter text input
+using UnfathomableMirrors.Models; // Links the Engine to the UI
 
-namespace UnfathomableMirrors
+namespace UnfathomableMirrors.Views
 {
     public partial class MainWindow : Window
     {
@@ -45,7 +47,6 @@ namespace UnfathomableMirrors
             UpdateAndDraw();
         }
 
-        // NEW: Intercepts keystrokes and blocks anything that isn't a number
         private void RadiusInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
             Regex regex = new Regex("[^0-9]+");
@@ -56,7 +57,6 @@ namespace UnfathomableMirrors
         {
             if (mirror != null && this.IsLoaded && double.TryParse(RadiusInput.Text, out double newRadius))
             {
-                // The Mirror class internally clamps this between 300 and 3000
                 mirror.SetRadius(newRadius);
                 UpdateAndDraw();
             }
