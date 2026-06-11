@@ -1,5 +1,4 @@
-﻿using System;
-using System.Windows;
+﻿using System.Windows;
 
 namespace UnfathomableMirrors
 {
@@ -17,13 +16,15 @@ namespace UnfathomableMirrors
 
         public void SetRadius(double newRadius)
         {
-            Radius = newRadius;
-            Diameter = newRadius * 2.0;
+            // Forces the radius to always stay between 300 and 3000
+            Radius = Math.Max(300, Math.Min(newRadius, 3000));
+            Diameter = Radius * 2.0;
         }
 
         public void UpdateDimensions(double canvasWidth, double canvasHeight)
         {
-            Center = new Point(canvasWidth * 0.75 - Radius, canvasHeight / 2.0);
+            // Places the surface of the mirror exactly in the center of the window
+            Center = new Point(canvasWidth / 2.0 - Radius, canvasHeight / 2.0);
 
             double cutDistanceY = canvasHeight / 4.0;
             double ratio = Math.Max(0, Math.Min(cutDistanceY / Radius, 1));

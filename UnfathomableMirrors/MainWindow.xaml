@@ -14,10 +14,11 @@
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
                 <Button Content="➕ Add Ray" Click="AddRay_Click" Padding="15,8" FontWeight="Bold" Background="#E0E0E0" Cursor="Hand"/>
 
-                <TextBlock Text="Radius:" VerticalAlignment="Center" Margin="20,0,5,0" FontWeight="SemiBold" FontSize="14"/>
-                <TextBox x:Name="RadiusInput" Text="900" Width="60" VerticalAlignment="Center" Padding="2" TextChanged="RadiusInput_TextChanged"/>
+                <TextBlock Text="Radius (300-3000):" VerticalAlignment="Center" Margin="20,0,5,0" FontWeight="SemiBold" FontSize="14"/>
+                <TextBox x:Name="RadiusInput" Text="900" Width="60" VerticalAlignment="Center" Padding="2" 
+                         TextChanged="RadiusInput_TextChanged" PreviewTextInput="RadiusInput_PreviewTextInput"/>
 
-                <CheckBox x:Name="ShowGuidesCheck" Content="Show Normal Line &amp; Center" IsChecked="True" 
+                <CheckBox x:Name="ShowGuidesCheck" Content="Show Normal Line &amp; Center" IsChecked="False" 
                           VerticalAlignment="Center" Margin="20,0,0,0" FontWeight="SemiBold" Click="ShowGuides_Click"/>
 
                 <TextBlock x:Name="ModeLabel" Text="Mode: MOVING (Press 'A')  |  Right-Click Box to Delete" 

@@ -1,22 +1,21 @@
-﻿using System.Collections.Generic;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Text.RegularExpressions; // NEW: Required to filter text input
 
 namespace UnfathomableMirrors
 {
     public partial class MainWindow : Window
     {
         private List<RayEmitter> emitters = new List<RayEmitter>();
-        private Mirror mirror = new Mirror(900); // Default to 900
+        private Mirror mirror = new Mirror(900);
         private RayEmitter activeEmitter = null;
         private bool isMovingMode = true;
         private Point mousePos;
         private int rayCounter = 1;
 
-        // Array of unique colors for the rays (Red is explicitly excluded)
         private SolidColorBrush[] rayColors = new SolidColorBrush[]
         {
             Brushes.Blue, Brushes.Green, Brushes.DarkOrange, Brushes.Purple,
@@ -46,21 +45,23 @@ namespace UnfathomableMirrors
             UpdateAndDraw();
         }
 
-        // Handles keyboard input for Radius
+        // NEW: Intercepts keystrokes and blocks anything that isn't a number
+        private void RadiusInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            Regex regex = new Regex("[^0-9]+");
+            e.Handled = regex.IsMatch(e.Text);
+        }
+
         private void RadiusInput_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // Safety check: parse text into a number and prevent crashing on empty/invalid typing
             if (mirror != null && this.IsLoaded && double.TryParse(RadiusInput.Text, out double newRadius))
             {
-                if (newRadius > 0)
-                {
-                    mirror.SetRadius(newRadius);
-                    UpdateAndDraw();
-                }
+                // The Mirror class internally clamps this between 300 and 3000
+                mirror.SetRadius(newRadius);
+                UpdateAndDraw();
             }
         }
 
-        // Forces a redraw when the user clicks the checkbox
         private void ShowGuides_Click(object sender, RoutedEventArgs e)
         {
             UpdateAndDraw();
@@ -73,7 +74,7 @@ namespace UnfathomableMirrors
                 isMovingMode = !isMovingMode;
                 ModeLabel.Text = isMovingMode ? "Mode: MOVING (Press 'A')  |  Right-Click Box to Delete"
                                               : "Mode: AIMING (Press 'A')  |  Right-Click Box to Delete";
-                ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson; // Changed Aiming to Red
+                ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
                 UpdateAndDraw();
             }
         }
@@ -137,14 +138,12 @@ namespace UnfathomableMirrors
                 ray.UpdatePhysics(mirror);
             }
 
-            // Draw Mirror Arc
             PathGeometry arcGeo = new PathGeometry();
             PathFigure arcFig = new PathFigure { StartPoint = mirror.GetArcStartPoint(), IsClosed = false };
             arcFig.Segments.Add(new ArcSegment(mirror.GetArcEndPoint(), new Size(mirror.Radius, mirror.Radius), 0, false, SweepDirection.Clockwise, true));
             arcGeo.Figures.Add(arcFig);
             SimCanvas.Children.Add(new Path { Data = arcGeo, Stroke = Brushes.Black, StrokeThickness = 3 });
 
-            // Toggleable Center Dot
             if (ShowGuidesCheck.IsChecked == true)
             {
                 Ellipse centerDot = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Black };
@@ -153,15 +152,12 @@ namespace UnfathomableMirrors
                 SimCanvas.Children.Add(centerDot);
             }
 
-            // Render Emitters and Lasers
             foreach (var ray in emitters)
             {
-                // Incident Line uses ray.RayColor
                 SimCanvas.Children.Add(new Line { X1 = ray.Position.X, Y1 = ray.Position.Y, X2 = ray.EndPoint.X, Y2 = ray.EndPoint.Y, Stroke = ray.RayColor, StrokeThickness = 2 });
 
                 if (ray.IsHitting)
                 {
-                    // Toggleable Dotted Normal Line
                     if (ShowGuidesCheck.IsChecked == true)
                     {
                         Line normalLine = new Line
@@ -172,22 +168,19 @@ namespace UnfathomableMirrors
                             Y2 = ray.NormalEndPoint.Y,
                             Stroke = Brushes.Red,
                             StrokeThickness = 1.5,
-                            StrokeDashArray = new DoubleCollection { 4, 4 } // Makes it a dotted line
+                            StrokeDashArray = new DoubleCollection { 4, 4 }
                         };
                         SimCanvas.Children.Add(normalLine);
                     }
 
-                    // Reflected Line uses ray.RayColor
                     SimCanvas.Children.Add(new Line { X1 = ray.EndPoint.X, Y1 = ray.EndPoint.Y, X2 = ray.ReflectionEndPoint.X, Y2 = ray.ReflectionEndPoint.Y, Stroke = ray.RayColor, StrokeThickness = 2 });
 
-                    // Angle Text uses the ray color so you know which text belongs to which beam
                     TextBlock angleText = new TextBlock { Text = $"Ray {ray.Id}\nIncidence: {ray.IncidenceAngleDeg:F1}°", Foreground = ray.RayColor, FontWeight = FontWeights.SemiBold };
                     Canvas.SetLeft(angleText, ray.EndPoint.X + 10);
                     Canvas.SetTop(angleText, ray.EndPoint.Y - 20);
                     SimCanvas.Children.Add(angleText);
                 }
 
-                // Emitter UI Hitbox Box (Blue for Moving, Crimson for Aiming)
                 Brush boxColor = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
                 Grid emitterUI = new Grid { Width = 30, Height = 20 };
                 emitterUI.Children.Add(new Rectangle { Fill = boxColor, RadiusX = 3, RadiusY = 3 });
@@ -201,7 +194,6 @@ namespace UnfathomableMirrors
                 SimCanvas.Children.Add(emitterUI);
             }
 
-            // Dotted Aiming Line
             if (activeEmitter != null && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
             {
                 Line dottedLine = new Line { X1 = activeEmitter.Position.X, Y1 = activeEmitter.Position.Y, X2 = mousePos.X, Y2 = mousePos.Y, Stroke = Brushes.Gray, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 2, 2 } };
