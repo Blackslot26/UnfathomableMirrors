@@ -55,7 +55,7 @@ namespace UnfathomableMirrors.Models
 
             for (int i = 0; i < 2; i++)
             {
-                if (possibleTs[i] > 0.01)
+                if (possibleTs[i] > 0.001)
                 {
                     double hitX = rayOrigin.X + possibleTs[i] * cosA;
                     double hitY = rayOrigin.Y + possibleTs[i] * sinA;

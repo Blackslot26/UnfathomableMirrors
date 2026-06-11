@@ -56,10 +56,11 @@ namespace UnfathomableMirrors.Models
                 double tSurf = ((p1.X - rayOrigin.X) * rayDy - (p1.Y - rayOrigin.Y) * rayDx) / den;
                 double tRay = ((p1.X - p2.X) * (p1.Y - rayOrigin.Y) - (p1.Y - p2.Y) * (p1.X - rayOrigin.X)) / den;
 
-                if (tSurf >= 0.0 && tSurf <= 1.0 && tRay > 0.01 && tRay < t)
+                if (tSurf >= -0.001 && tSurf <= 1.001 && tRay > 0.001 && tRay < t)
                 {
                     t = tRay;
-                    nx = -(p2.Y - p1.Y); ny = p2.X - p1.X;
+                    nx = p2.Y - p1.Y;
+                    ny = -(p2.X - p1.X);
                     double len = Math.Sqrt(nx * nx + ny * ny);
                     nx /= len; ny /= len;
                     hit = true;

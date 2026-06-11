@@ -5,29 +5,35 @@ using System.Windows.Media;
 
 namespace UnfathomableMirrors.Models
 {
-    public class RaySegment
+    // OPTIMIZACIÓN 1: Convertido a 'struct' para eliminar el Garbage Collection en tiempo real
+    public struct RaySegment
     {
         public Point Start { get; set; }
         public Point End { get; set; }
         public bool IsHitting { get; set; }
         public Point NormalEnd { get; set; }
         public double IncidenceAngleDeg { get; set; }
+        public string ActionType { get; set; }
     }
 
     public class RayEmitter
     {
         public int Id { get; set; }
+        public int GroupId { get; set; }
         public Point Position { get; set; }
         public double Angle { get; private set; }
         public SolidColorBrush RayColor { get; private set; }
-        public List<RaySegment> Segments { get; private set; } = new List<RaySegment>();
+        public double DispersionModifier { get; private set; }
+
+        // Asignación de capacidad inicial para evitar redimensionado de arrays
+        public List<RaySegment> Segments { get; private set; } = new List<RaySegment>(25);
 
         private const double MaxRayLength = 2000;
         private const int MaxBounces = 25;
 
-        public RayEmitter(int id, double x, double y, SolidColorBrush color, double angleDegrees = 0)
+        public RayEmitter(int id, int groupId, double x, double y, SolidColorBrush color, double angleDegrees = 0, double dispersion = 0)
         {
-            Id = id; Position = new Point(x, y); RayColor = color; SetAngleDegrees(angleDegrees);
+            Id = id; GroupId = groupId; Position = new Point(x, y); RayColor = color; SetAngleDegrees(angleDegrees); DispersionModifier = dispersion;
         }
 
         public void MoveTo(Point newPos) => Position = newPos;
@@ -66,8 +72,8 @@ namespace UnfathomableMirrors.Models
                     double n1 = 1.0, n2 = 1.0;
                     if (hitSurface.IsRefractive)
                     {
-                        n1 = isEntering ? 1.0 : hitSurface.RefractiveIndex;
-                        n2 = isEntering ? hitSurface.RefractiveIndex : 1.0;
+                        n1 = isEntering ? 1.0 : (hitSurface.RefractiveIndex + DispersionModifier);
+                        n2 = isEntering ? (hitSurface.RefractiveIndex + DispersionModifier) : 1.0;
                     }
 
                     double cosI = -(rayDx * actualNx + rayDy * actualNy);
@@ -79,7 +85,8 @@ namespace UnfathomableMirrors.Models
                     Point normalTarget = new Point(hitPoint.X + actualNx * 60, hitPoint.Y + actualNy * 60);
                     double incidence = Math.Acos(Math.Max(-1, Math.Min(1, cosI))) * 180.0 / Math.PI;
 
-                    Segments.Add(new RaySegment { Start = currentPos, End = hitPoint, IsHitting = true, NormalEnd = normalTarget, IncidenceAngleDeg = incidence });
+                    string action = !hitSurface.IsRefractive ? "Reflection" : (isTIR ? "TIR" : "Refraction");
+                    Segments.Add(new RaySegment { Start = currentPos, End = hitPoint, IsHitting = true, NormalEnd = normalTarget, IncidenceAngleDeg = incidence, ActionType = action });
 
                     if (!hitSurface.IsRefractive || isTIR)
                     {

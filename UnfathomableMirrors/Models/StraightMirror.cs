@@ -50,7 +50,7 @@ namespace UnfathomableMirrors.Models
             double tSurf = ((x1 - x3) * dy - (y1 - y3) * dx) / den;
             double tRay = ((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
 
-            if (tSurf >= 0.0 && tSurf <= 1.0 && tRay > 0.01)
+            if (tSurf >= -0.001 && tSurf <= 1.001 && tRay > 0.001)
             {
                 t = tRay;
                 nx = -(y2 - y1); ny = x2 - x1;
