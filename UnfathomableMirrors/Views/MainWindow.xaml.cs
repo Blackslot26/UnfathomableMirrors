@@ -1,204 +1,147 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using UnfathomableMirrors.Models; // Links the Engine to the UI
+using UnfathomableMirrors.Models;
 
 namespace UnfathomableMirrors.Views
 {
     public partial class MainWindow : Window
     {
         private List<RayEmitter> emitters = new List<RayEmitter>();
-        private Mirror mirror = new Mirror(900);
+        private List<IOpticSurface> surfaces = new List<IOpticSurface>();
         private RayEmitter activeEmitter = null;
+        private IOpticSurface activeSurface = null;
         private bool isMovingMode = true;
         private Point mousePos;
         private int rayCounter = 1;
-
-        private SolidColorBrush[] rayColors = new SolidColorBrush[]
-        {
-            Brushes.Blue, Brushes.Green, Brushes.DarkOrange, Brushes.Purple,
-            Brushes.Teal, Brushes.Magenta, Brushes.DeepPink, Brushes.DarkCyan, Brushes.Indigo
-        };
         private int colorIndex = 0;
+        private SolidColorBrush[] rayColors = { Brushes.Blue, Brushes.Green, Brushes.DarkOrange, Brushes.Purple, Brushes.Teal, Brushes.Magenta, Brushes.DeepPink, Brushes.DarkCyan, Brushes.Indigo };
 
         public MainWindow()
         {
             InitializeComponent();
-            emitters.Add(new RayEmitter(rayCounter++, 300, 300, GetNextColor()));
-
-            Loaded += (s, e) => { UpdateAndDraw(); };
-            SizeChanged += (s, e) => { UpdateAndDraw(); };
+            surfaces.Add(new CurvedMirror(600) { Position = new Point(700, 300) });
+            emitters.Add(new RayEmitter(rayCounter++, 200, 300, GetNextColor(), angleDegrees: 0));
+            Loaded += (s, e) => UpdateAndDraw();
+            SizeChanged += (s, e) => UpdateAndDraw();
         }
 
-        private SolidColorBrush GetNextColor()
-        {
-            var color = rayColors[colorIndex % rayColors.Length];
-            colorIndex++;
-            return color;
-        }
-
-        private void AddRay_Click(object sender, RoutedEventArgs e)
-        {
-            emitters.Add(new RayEmitter(rayCounter++, 300, 300, GetNextColor()));
-            UpdateAndDraw();
-        }
-
-        private void RadiusInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
-        {
-            Regex regex = new Regex("[^0-9]+");
-            e.Handled = regex.IsMatch(e.Text);
-        }
-
-        private void RadiusInput_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (mirror != null && this.IsLoaded && double.TryParse(RadiusInput.Text, out double newRadius))
-            {
-                mirror.SetRadius(newRadius);
-                UpdateAndDraw();
-            }
-        }
-
-        private void ShowGuides_Click(object sender, RoutedEventArgs e)
-        {
-            UpdateAndDraw();
-        }
-
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.A)
-            {
-                isMovingMode = !isMovingMode;
-                ModeLabel.Text = isMovingMode ? "Mode: MOVING (Press 'A')  |  Right-Click Box to Delete"
-                                              : "Mode: AIMING (Press 'A')  |  Right-Click Box to Delete";
-                ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
-                UpdateAndDraw();
-            }
-        }
-
-        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            mousePos = e.GetPosition(SimCanvas);
-            foreach (var emitter in emitters)
-            {
-                if (emitter.IsMouseOver(mousePos))
-                {
-                    activeEmitter = emitter;
-                    break;
-                }
-            }
-        }
-
-        private void Canvas_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            Point clickPos = e.GetPosition(SimCanvas);
-            for (int i = emitters.Count - 1; i >= 0; i--)
-            {
-                if (emitters[i].IsMouseOver(clickPos))
-                {
-                    emitters.RemoveAt(i);
-                    UpdateAndDraw();
-                    break;
-                }
-            }
-        }
-
-        private void Canvas_MouseMove(object sender, MouseEventArgs e)
-        {
-            mousePos = e.GetPosition(SimCanvas);
-
-            if (activeEmitter != null && e.LeftButton == MouseButtonState.Pressed)
-            {
-                if (isMovingMode)
-                    activeEmitter.MoveTo(mousePos);
-                else
-                    activeEmitter.AimAwayFrom(mousePos);
-
-                UpdateAndDraw();
-            }
-        }
-
-        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
-        {
-            activeEmitter = null;
-            UpdateAndDraw();
-        }
+        private SolidColorBrush GetNextColor() => rayColors[colorIndex++ % rayColors.Length];
 
         private void UpdateAndDraw()
         {
+            if (SimCanvas == null) return;
             SimCanvas.Children.Clear();
-            if (SimCanvas.ActualWidth == 0 || SimCanvas.ActualHeight == 0) return;
 
-            mirror.UpdateDimensions(SimCanvas.ActualWidth, SimCanvas.ActualHeight);
-            foreach (var ray in emitters)
+            foreach (var surface in surfaces)
             {
-                ray.UpdatePhysics(mirror);
+                surface.UpdateDimensions(SimCanvas.ActualWidth, SimCanvas.ActualHeight);
+                DrawSurface(surface);
             }
 
-            PathGeometry arcGeo = new PathGeometry();
-            PathFigure arcFig = new PathFigure { StartPoint = mirror.GetArcStartPoint(), IsClosed = false };
-            arcFig.Segments.Add(new ArcSegment(mirror.GetArcEndPoint(), new Size(mirror.Radius, mirror.Radius), 0, false, SweepDirection.Clockwise, true));
-            arcGeo.Figures.Add(arcFig);
-            SimCanvas.Children.Add(new Path { Data = arcGeo, Stroke = Brushes.Black, StrokeThickness = 3 });
-
-            if (ShowGuidesCheck.IsChecked == true)
-            {
-                Ellipse centerDot = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Black };
-                Canvas.SetLeft(centerDot, mirror.Center.X - 5);
-                Canvas.SetTop(centerDot, mirror.Center.Y - 5);
-                SimCanvas.Children.Add(centerDot);
-            }
+            bool showGuides = ShowGuidesCheck?.IsChecked ?? false;
 
             foreach (var ray in emitters)
             {
-                SimCanvas.Children.Add(new Line { X1 = ray.Position.X, Y1 = ray.Position.Y, X2 = ray.EndPoint.X, Y2 = ray.EndPoint.Y, Stroke = ray.RayColor, StrokeThickness = 2 });
+                ray.UpdatePhysics(surfaces);
 
-                if (ray.IsHitting)
+                foreach (var segment in ray.Segments)
                 {
-                    if (ShowGuidesCheck.IsChecked == true)
+                    SimCanvas.Children.Add(new Line { X1 = segment.Start.X, Y1 = segment.Start.Y, X2 = segment.End.X, Y2 = segment.End.Y, Stroke = ray.RayColor, StrokeThickness = 2 });
+
+                    if (segment.IsHitting)
                     {
-                        Line normalLine = new Line
+                        if (showGuides)
                         {
-                            X1 = ray.EndPoint.X,
-                            Y1 = ray.EndPoint.Y,
-                            X2 = ray.NormalEndPoint.X,
-                            Y2 = ray.NormalEndPoint.Y,
-                            Stroke = Brushes.Red,
-                            StrokeThickness = 1.5,
-                            StrokeDashArray = new DoubleCollection { 4, 4 }
-                        };
-                        SimCanvas.Children.Add(normalLine);
+                            SimCanvas.Children.Add(new Line { X1 = segment.End.X, Y1 = segment.End.Y, X2 = segment.NormalEnd.X, Y2 = segment.NormalEnd.Y, Stroke = Brushes.Gray, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 2, 4 } });
+                        }
+
+                        TextBlock angleText = new TextBlock { Text = $"{Math.Round(segment.IncidenceAngleDeg, 1)}°", Foreground = ray.RayColor, FontSize = 11, FontWeight = FontWeights.SemiBold };
+                        Canvas.SetLeft(angleText, segment.End.X + 10);
+                        Canvas.SetTop(angleText, segment.End.Y - 20);
+                        SimCanvas.Children.Add(angleText);
                     }
-
-                    SimCanvas.Children.Add(new Line { X1 = ray.EndPoint.X, Y1 = ray.EndPoint.Y, X2 = ray.ReflectionEndPoint.X, Y2 = ray.ReflectionEndPoint.Y, Stroke = ray.RayColor, StrokeThickness = 2 });
-
-                    TextBlock angleText = new TextBlock { Text = $"Ray {ray.Id}\nIncidence: {ray.IncidenceAngleDeg:F1}°", Foreground = ray.RayColor, FontWeight = FontWeights.SemiBold };
-                    Canvas.SetLeft(angleText, ray.EndPoint.X + 10);
-                    Canvas.SetTop(angleText, ray.EndPoint.Y - 20);
-                    SimCanvas.Children.Add(angleText);
                 }
 
-                Brush boxColor = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
-                Grid emitterUI = new Grid { Width = 30, Height = 20 };
-                emitterUI.Children.Add(new Rectangle { Fill = boxColor, RadiusX = 3, RadiusY = 3 });
+                Grid emitterUI = new Grid { Width = 30, Height = 20, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new RotateTransform(ray.Angle * 180.0 / Math.PI) };
+                emitterUI.Children.Add(new Rectangle { Fill = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson, RadiusX = 3, RadiusY = 3 });
                 emitterUI.Children.Add(new TextBlock { Text = ray.Id.ToString(), Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold });
-
-                emitterUI.RenderTransformOrigin = new Point(0.5, 0.5);
-                emitterUI.RenderTransform = new RotateTransform(ray.Angle * 180.0 / Math.PI);
-
                 Canvas.SetLeft(emitterUI, ray.Position.X - 15);
                 Canvas.SetTop(emitterUI, ray.Position.Y - 10);
                 SimCanvas.Children.Add(emitterUI);
             }
 
-            if (activeEmitter != null && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
+            if ((activeEmitter != null || activeSurface != null) && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
             {
-                Line dottedLine = new Line { X1 = activeEmitter.Position.X, Y1 = activeEmitter.Position.Y, X2 = mousePos.X, Y2 = mousePos.Y, Stroke = Brushes.Gray, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 2, 2 } };
-                SimCanvas.Children.Add(dottedLine);
+                Point startPoint = activeEmitter != null ? activeEmitter.Position : activeSurface.Position;
+                SimCanvas.Children.Add(new Line { X1 = startPoint.X, Y1 = startPoint.Y, X2 = mousePos.X, Y2 = mousePos.Y, Stroke = Brushes.Gray, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 3, 3 } });
             }
         }
+
+        private void DrawSurface(IOpticSurface surface)
+        {
+            if (surface is CurvedMirror curved)
+            {
+                Path geometryPath = new Path { Stroke = Brushes.Black, StrokeThickness = 4 };
+                PathGeometry pathGeometry = new PathGeometry();
+                PathFigure pathFigure = new PathFigure();
+
+                double expectedAngle = curved.Angle + Math.PI;
+                pathFigure.StartPoint = new Point(curved.Center.X + curved.Radius * Math.Cos(expectedAngle - curved.MaxAngle), curved.Center.Y + curved.Radius * Math.Sin(expectedAngle - curved.MaxAngle));
+                pathFigure.Segments.Add(new ArcSegment { Point = new Point(curved.Center.X + curved.Radius * Math.Cos(expectedAngle + curved.MaxAngle), curved.Center.Y + curved.Radius * Math.Sin(expectedAngle + curved.MaxAngle)), Size = new Size(curved.Radius, curved.Radius), SweepDirection = SweepDirection.Clockwise, IsLargeArc = false });
+
+                pathGeometry.Figures.Add(pathFigure);
+                geometryPath.Data = pathGeometry;
+                SimCanvas.Children.Add(geometryPath);
+            }
+            else if (surface is PlaneMirror plane)
+            {
+                SimCanvas.Children.Add(new Line { X1 = plane.StartPoint.X, Y1 = plane.StartPoint.Y, X2 = plane.EndPoint.X, Y2 = plane.EndPoint.Y, Stroke = Brushes.Black, StrokeThickness = 5 });
+            }
+
+            Ellipse dragHandle = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Black, Cursor = Cursors.SizeAll };
+            Canvas.SetLeft(dragHandle, surface.Position.X - 5);
+            Canvas.SetTop(dragHandle, surface.Position.Y - 5);
+            SimCanvas.Children.Add(dragHandle);
+        }
+
+        private void AddSurface_Click(object sender, RoutedEventArgs e)
+        {
+            if (SurfaceSelector == null) return;
+            double radius = double.TryParse(RadiusInput.Text, out double r) ? r : 600;
+            if (((ComboBoxItem)SurfaceSelector.SelectedItem).Content.ToString() == "Curved Mirror") surfaces.Add(new CurvedMirror(radius) { Position = new Point(400, 250) });
+            else surfaces.Add(new PlaneMirror() { Position = new Point(400, 250) });
+            UpdateAndDraw();
+        }
+
+        private void AddRay_Click(object sender, RoutedEventArgs e) { emitters.Add(new RayEmitter(rayCounter++, 100, 100, GetNextColor())); UpdateAndDraw(); }
+
+        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            mousePos = e.GetPosition(SimCanvas);
+            if (e.ChangedButton == MouseButton.Right) { emitters.RemoveAll(r => r.IsMouseOver(mousePos)); surfaces.RemoveAll(s => s.IsMouseOver(mousePos)); UpdateAndDraw(); return; }
+            activeEmitter = emitters.Find(r => r.IsMouseOver(mousePos));
+            if (activeEmitter == null) activeSurface = surfaces.Find(s => s.IsMouseOver(mousePos));
+            if ((activeEmitter != null || activeSurface != null) && !isMovingMode) { activeEmitter?.AimAwayFrom(mousePos); activeSurface?.AimAwayFrom(mousePos); UpdateAndDraw(); }
+        }
+
+        private void Canvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+            mousePos = e.GetPosition(SimCanvas);
+            if (activeEmitter != null) { if (isMovingMode) activeEmitter.MoveTo(mousePos); else activeEmitter.AimAwayFrom(mousePos); }
+            else if (activeSurface != null) { if (isMovingMode) activeSurface.MoveTo(mousePos); else activeSurface.AimAwayFrom(mousePos); }
+            UpdateAndDraw();
+        }
+
+        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e) { activeEmitter = null; activeSurface = null; UpdateAndDraw(); }
+        private void RadiusInput_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
+        private void ShowGuides_Click(object sender, RoutedEventArgs e) => UpdateAndDraw();
+        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING (Press 'A') | Right-Click to Delete" : "Mode: AIMING (Press 'A') | Right-Click to Delete"; UpdateAndDraw(); } }
     }
 }

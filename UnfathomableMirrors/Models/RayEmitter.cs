@@ -1,111 +1,89 @@
-﻿using System.Windows;
+﻿using System;
+using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Media;
 
-namespace UnfathomableMirrors.Models;
-
-public class RayEmitter
+namespace UnfathomableMirrors.Models
 {
-    public int Id { get; set; }
-    public Point Position { get; set; }
-    public double Angle { get; private set; }
-    public Point EndPoint { get; private set; }
-    public Point NormalEndPoint { get; private set; }
-    public Point ReflectionEndPoint { get; private set; }
-    public bool IsHitting { get; private set; }
-    public double IncidenceAngleDeg { get; private set; }
-
-    public SolidColorBrush RayColor { get; private set; }
-
-    private const double MaxRayLength = 2000;
-
-    // Added color parameter to the constructor
-    public RayEmitter(int id, double x, double y, SolidColorBrush color, double angleDegrees = 0)
+    public class RaySegment
     {
-        Id = id;
-        Position = new Point(x, y);
-        RayColor = color;
-        SetAngleDegrees(angleDegrees);
+        public Point Start { get; set; }
+        public Point End { get; set; }
+        public bool IsHitting { get; set; }
+        public Point NormalEnd { get; set; }
+        public double IncidenceAngleDeg { get; set; }
     }
 
-    public void MoveTo(Point newPos)
+    public class RayEmitter
     {
-        Position = newPos;
-    }
+        public int Id { get; set; }
+        public Point Position { get; set; }
+        public double Angle { get; private set; }
+        public SolidColorBrush RayColor { get; private set; }
+        public List<RaySegment> Segments { get; private set; } = new List<RaySegment>();
 
-    public void AimAwayFrom(Point target)
-    {
-        double rawAngle = Math.Atan2(Position.Y - target.Y, Position.X - target.X);
-        double snappedAngleDeg = Math.Round(rawAngle * 180.0 / Math.PI);
-        Angle = snappedAngleDeg * Math.PI / 180.0;
-    }
+        private const double MaxRayLength = 2000;
+        private const int MaxBounces = 15;
 
-    public void SetAngleDegrees(double degrees)
-    {
-        Angle = degrees * Math.PI / 180.0;
-    }
-
-    public bool IsMouseOver(Point mousePos)
-    {
-        return Math.Abs(mousePos.X - Position.X) <= 15 && Math.Abs(mousePos.Y - Position.Y) <= 10;
-    }
-
-    public void UpdatePhysics(Mirror mirror)
-    {
-        EndPoint = new Point(Position.X + MaxRayLength * Math.Cos(Angle), Position.Y + MaxRayLength * Math.Sin(Angle));
-        IsHitting = false;
-
-        double dx = Position.X - mirror.Center.X;
-        double dy = Position.Y - mirror.Center.Y;
-
-        double b = 2 * (dx * Math.Cos(Angle) + dy * Math.Sin(Angle));
-        double c = (dx * dx + dy * dy) - (mirror.Radius * mirror.Radius);
-        double discriminant = (b * b) - (4 * c);
-
-        if (discriminant < 0) return;
-
-        double t1 = (-b + Math.Sqrt(discriminant)) / 2.0;
-        double t2 = (-b - Math.Sqrt(discriminant)) / 2.0;
-        double validT = -1;
-        double minValidT = double.MaxValue;
-
-        double[] possibleTs = { t1, t2 };
-        for (int i = 0; i < 2; i++)
+        public RayEmitter(int id, double x, double y, SolidColorBrush color, double angleDegrees = 0)
         {
-            if (possibleTs[i] >= 0)
-            {
-                double hitX = Position.X + possibleTs[i] * Math.Cos(Angle);
-                double hitY = Position.Y + possibleTs[i] * Math.Sin(Angle);
-                double hitAngle = Math.Atan2(hitY - mirror.Center.Y, hitX - mirror.Center.X);
-
-                if (mirror.IsAngleWithinBounds(hitAngle) && possibleTs[i] < minValidT)
-                {
-                    minValidT = possibleTs[i];
-                    validT = possibleTs[i];
-                }
-            }
+            Id = id; Position = new Point(x, y); RayColor = color; SetAngleDegrees(angleDegrees);
         }
 
-        if (validT >= 0)
+        public void MoveTo(Point newPos) => Position = newPos;
+        public void AimAwayFrom(Point target) => Angle = Math.Round(Math.Atan2(Position.Y - target.Y, Position.X - target.X) * 180.0 / Math.PI) * Math.PI / 180.0;
+        public void SetAngleDegrees(double degrees) => Angle = degrees * Math.PI / 180.0;
+        public bool IsMouseOver(Point mousePos) => Math.Abs(mousePos.X - Position.X) <= 15 && Math.Abs(mousePos.Y - Position.Y) <= 10;
+
+        public void UpdatePhysics(List<IOpticSurface> surfaces)
         {
-            IsHitting = true;
-            EndPoint = new Point(Position.X + validT * Math.Cos(Angle), Position.Y + validT * Math.Sin(Angle));
-            NormalEndPoint = mirror.Center;
+            Segments.Clear();
+            Point currentPos = Position;
+            double currentAngle = Angle;
+            IOpticSurface lastHitSurface = null;
 
-            double v1x = Position.X - EndPoint.X, v1y = Position.Y - EndPoint.Y;
-            double v2x = mirror.Center.X - EndPoint.X, v2y = mirror.Center.Y - EndPoint.Y;
-            double dotProduct = (v1x * v2x) + (v1y * v2y);
-            double mag1 = Math.Sqrt(v1x * v1x + v1y * v1y);
+            for (int bounce = 0; bounce < MaxBounces; bounce++)
+            {
+                double minT = double.MaxValue, bestNx = 0, bestNy = 0;
+                IOpticSurface hitSurface = null;
 
-            IncidenceAngleDeg = Math.Acos(dotProduct / (mag1 * mirror.Radius)) * 180.0 / Math.PI;
+                foreach (var surface in surfaces)
+                {
+                    if (surface == lastHitSurface) continue;
+                    if (surface.TryIntersect(currentPos, currentAngle, out double t, out double nx, out double ny))
+                    {
+                        if (t < minT) { minT = t; bestNx = nx; bestNy = ny; hitSurface = surface; }
+                    }
+                }
 
-            double Ix = Math.Cos(Angle), Iy = Math.Sin(Angle);
-            double Nx = v2x / mirror.Radius, Ny = v2y / mirror.Radius;
-            double dotIN = (Ix * Nx) + (Iy * Ny);
+                if (hitSurface != null)
+                {
+                    double rayDx = Math.Cos(currentAngle), rayDy = Math.Sin(currentAngle);
 
-            double Rx = Ix - 2 * dotIN * Nx;
-            double Ry = Iy - 2 * dotIN * Ny;
+                    // Invierte la normal si apunta en la misma dirección que el rayo
+                    if (rayDx * bestNx + rayDy * bestNy > 0) { bestNx = -bestNx; bestNy = -bestNy; }
 
-            ReflectionEndPoint = new Point(EndPoint.X + MaxRayLength * Rx, EndPoint.Y + MaxRayLength * Ry);
+                    Point hitPoint = new Point(currentPos.X + minT * rayDx, currentPos.Y + minT * rayDy);
+                    Point normalTarget = new Point(hitPoint.X + bestNx * 60, hitPoint.Y + bestNy * 60);
+
+                    double dotProduct = -(rayDx * bestNx + rayDy * bestNy);
+                    double incidence = Math.Acos(Math.Max(-1, Math.Min(1, dotProduct))) * 180.0 / Math.PI;
+
+                    Segments.Add(new RaySegment { Start = currentPos, End = hitPoint, IsHitting = true, NormalEnd = normalTarget, IncidenceAngleDeg = incidence });
+
+                    double dotIN = rayDx * bestNx + rayDy * bestNy;
+                    double Rx = rayDx - 2 * dotIN * bestNx, Ry = rayDy - 2 * dotIN * bestNy;
+
+                    currentPos = hitPoint;
+                    currentAngle = Math.Atan2(Ry, Rx);
+                    lastHitSurface = hitSurface;
+                }
+                else
+                {
+                    Segments.Add(new RaySegment { Start = currentPos, End = new Point(currentPos.X + MaxRayLength * Math.Cos(currentAngle), currentPos.Y + MaxRayLength * Math.Sin(currentAngle)), IsHitting = false });
+                    break;
+                }
+            }
         }
     }
 }
