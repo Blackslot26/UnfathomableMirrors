@@ -23,7 +23,7 @@ namespace UnfathomableMirrors.Models
         public List<RaySegment> Segments { get; private set; } = new List<RaySegment>();
 
         private const double MaxRayLength = 2000;
-        private const int MaxBounces = 15;
+        private const int MaxBounces = 25;
 
         public RayEmitter(int id, double x, double y, SolidColorBrush color, double angleDegrees = 0)
         {
@@ -40,7 +40,6 @@ namespace UnfathomableMirrors.Models
             Segments.Clear();
             Point currentPos = Position;
             double currentAngle = Angle;
-            IOpticSurface lastHitSurface = null;
 
             for (int bounce = 0; bounce < MaxBounces; bounce++)
             {
@@ -49,7 +48,6 @@ namespace UnfathomableMirrors.Models
 
                 foreach (var surface in surfaces)
                 {
-                    if (surface == lastHitSurface) continue;
                     if (surface.TryIntersect(currentPos, currentAngle, out double t, out double nx, out double ny))
                     {
                         if (t < minT) { minT = t; bestNx = nx; bestNy = ny; hitSurface = surface; }
@@ -59,24 +57,44 @@ namespace UnfathomableMirrors.Models
                 if (hitSurface != null)
                 {
                     double rayDx = Math.Cos(currentAngle), rayDy = Math.Sin(currentAngle);
+                    double dotIN = rayDx * bestNx + rayDy * bestNy;
 
-                    // Invierte la normal si apunta en la misma dirección que el rayo
-                    if (rayDx * bestNx + rayDy * bestNy > 0) { bestNx = -bestNx; bestNy = -bestNy; }
+                    bool isEntering = dotIN < 0;
+                    double actualNx = isEntering ? bestNx : -bestNx;
+                    double actualNy = isEntering ? bestNy : -bestNy;
+
+                    double n1 = 1.0, n2 = 1.0;
+                    if (hitSurface.IsRefractive)
+                    {
+                        n1 = isEntering ? 1.0 : hitSurface.RefractiveIndex;
+                        n2 = isEntering ? hitSurface.RefractiveIndex : 1.0;
+                    }
+
+                    double cosI = -(rayDx * actualNx + rayDy * actualNy);
+                    double r = n1 / n2;
+                    double sinT2 = r * r * (1.0 - cosI * cosI);
+                    bool isTIR = hitSurface.IsRefractive && sinT2 > 1.0;
 
                     Point hitPoint = new Point(currentPos.X + minT * rayDx, currentPos.Y + minT * rayDy);
-                    Point normalTarget = new Point(hitPoint.X + bestNx * 60, hitPoint.Y + bestNy * 60);
-
-                    double dotProduct = -(rayDx * bestNx + rayDy * bestNy);
-                    double incidence = Math.Acos(Math.Max(-1, Math.Min(1, dotProduct))) * 180.0 / Math.PI;
+                    Point normalTarget = new Point(hitPoint.X + actualNx * 60, hitPoint.Y + actualNy * 60);
+                    double incidence = Math.Acos(Math.Max(-1, Math.Min(1, cosI))) * 180.0 / Math.PI;
 
                     Segments.Add(new RaySegment { Start = currentPos, End = hitPoint, IsHitting = true, NormalEnd = normalTarget, IncidenceAngleDeg = incidence });
 
-                    double dotIN = rayDx * bestNx + rayDy * bestNy;
-                    double Rx = rayDx - 2 * dotIN * bestNx, Ry = rayDy - 2 * dotIN * bestNy;
-
+                    if (!hitSurface.IsRefractive || isTIR)
+                    {
+                        double Rx = rayDx + 2 * cosI * actualNx;
+                        double Ry = rayDy + 2 * cosI * actualNy;
+                        currentAngle = Math.Atan2(Ry, Rx);
+                    }
+                    else
+                    {
+                        double cosT = Math.Sqrt(1.0 - sinT2);
+                        double refrX = r * rayDx + (r * cosI - cosT) * actualNx;
+                        double refrY = r * rayDy + (r * cosI - cosT) * actualNy;
+                        currentAngle = Math.Atan2(refrY, refrX);
+                    }
                     currentPos = hitPoint;
-                    currentAngle = Math.Atan2(Ry, Rx);
-                    lastHitSurface = hitSurface;
                 }
                 else
                 {

@@ -8,13 +8,17 @@ namespace UnfathomableMirrors.Models
         public Point Position { get; set; }
         public double Angle { get; set; } = 0;
         public double Radius { get; private set; }
+        public double Length { get; private set; }
+        public bool IsRefractive => false;
+        public double RefractiveIndex => 1.0;
         public double MaxAngle { get; private set; }
         public Point Center { get; private set; }
 
-        public CurvedMirror(double initialRadius)
+        public CurvedMirror(double initialRadius, double length)
         {
             Position = new Point(550, 350);
             Radius = Math.Max(150, Math.Min(initialRadius, 2000));
+            Length = Math.Max(50, Math.Min(length, 1000));
         }
 
         public void MoveTo(Point newPos) => Position = newPos;
@@ -29,7 +33,7 @@ namespace UnfathomableMirrors.Models
         public void UpdateDimensions(double canvasWidth, double canvasHeight)
         {
             Center = new Point(Position.X + Radius * Math.Cos(Angle), Position.Y + Radius * Math.Sin(Angle));
-            double cutDistanceY = 120;
+            double cutDistanceY = Length / 2.0;
             MaxAngle = Math.Asin(Math.Max(0, Math.Min(cutDistanceY / Radius, 1)));
         }
 
@@ -38,7 +42,6 @@ namespace UnfathomableMirrors.Models
             t = -1; nx = 0; ny = 0;
             double cosA = Math.Cos(rayAngleRad), sinA = Math.Sin(rayAngleRad);
             double dx = rayOrigin.X - Center.X, dy = rayOrigin.Y - Center.Y;
-
             double a = cosA * cosA + sinA * sinA;
             double b = 2.0 * (dx * cosA + dy * sinA);
             double c = (dx * dx + dy * dy) - (Radius * Radius);
@@ -52,7 +55,7 @@ namespace UnfathomableMirrors.Models
 
             for (int i = 0; i < 2; i++)
             {
-                if (possibleTs[i] > 0.1)
+                if (possibleTs[i] > 0.01)
                 {
                     double hitX = rayOrigin.X + possibleTs[i] * cosA;
                     double hitY = rayOrigin.Y + possibleTs[i] * sinA;

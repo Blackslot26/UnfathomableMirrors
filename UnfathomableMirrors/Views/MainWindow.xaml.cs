@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,7 +26,7 @@ namespace UnfathomableMirrors.Views
         public MainWindow()
         {
             InitializeComponent();
-            surfaces.Add(new CurvedMirror(600) { Position = new Point(700, 300) });
+            surfaces.Add(new RefractionBlock(240, 100, 1.5) { Position = new Point(700, 300) });
             emitters.Add(new RayEmitter(rayCounter++, 200, 300, GetNextColor(), angleDegrees: 0));
             Loaded += (s, e) => UpdateAndDraw();
             SizeChanged += (s, e) => UpdateAndDraw();
@@ -61,9 +62,10 @@ namespace UnfathomableMirrors.Views
                             SimCanvas.Children.Add(new Line { X1 = segment.End.X, Y1 = segment.End.Y, X2 = segment.NormalEnd.X, Y2 = segment.NormalEnd.Y, Stroke = Brushes.Gray, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 2, 4 } });
                         }
 
-                        TextBlock angleText = new TextBlock { Text = $"{Math.Round(segment.IncidenceAngleDeg, 1)}°", Foreground = ray.RayColor, FontSize = 11, FontWeight = FontWeights.SemiBold };
+                        TextBlock angleText = new TextBlock { Text = $"{Math.Round(segment.IncidenceAngleDeg, 1)}°", Foreground = Brushes.Black, Background = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)), Padding = new Thickness(2), FontSize = 11, FontWeight = FontWeights.Bold };
                         Canvas.SetLeft(angleText, segment.End.X + 10);
                         Canvas.SetTop(angleText, segment.End.Y - 20);
+                        Canvas.SetZIndex(angleText, 100);
                         SimCanvas.Children.Add(angleText);
                     }
                 }
@@ -73,6 +75,7 @@ namespace UnfathomableMirrors.Views
                 emitterUI.Children.Add(new TextBlock { Text = ray.Id.ToString(), Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold });
                 Canvas.SetLeft(emitterUI, ray.Position.X - 15);
                 Canvas.SetTop(emitterUI, ray.Position.Y - 10);
+                Canvas.SetZIndex(emitterUI, 101);
                 SimCanvas.Children.Add(emitterUI);
             }
 
@@ -99,14 +102,21 @@ namespace UnfathomableMirrors.Views
                 geometryPath.Data = pathGeometry;
                 SimCanvas.Children.Add(geometryPath);
             }
-            else if (surface is PlaneMirror plane)
+            else if (surface is StraightMirror straight)
             {
-                SimCanvas.Children.Add(new Line { X1 = plane.StartPoint.X, Y1 = plane.StartPoint.Y, X2 = plane.EndPoint.X, Y2 = plane.EndPoint.Y, Stroke = Brushes.Black, StrokeThickness = 5 });
+                SimCanvas.Children.Add(new Line { X1 = straight.StartPoint.X, Y1 = straight.StartPoint.Y, X2 = straight.EndPoint.X, Y2 = straight.EndPoint.Y, Stroke = Brushes.Black, StrokeThickness = 5 });
+            }
+            else if (surface is RefractionBlock block)
+            {
+                Polygon rect = new Polygon { Fill = new SolidColorBrush(Color.FromArgb(50, 0, 150, 255)), Stroke = Brushes.DarkBlue, StrokeThickness = 2 };
+                foreach (var p in block.Corners) rect.Points.Add(p);
+                SimCanvas.Children.Add(rect);
             }
 
             Ellipse dragHandle = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Black, Cursor = Cursors.SizeAll };
             Canvas.SetLeft(dragHandle, surface.Position.X - 5);
             Canvas.SetTop(dragHandle, surface.Position.Y - 5);
+            Canvas.SetZIndex(dragHandle, 10);
             SimCanvas.Children.Add(dragHandle);
         }
 
@@ -114,8 +124,16 @@ namespace UnfathomableMirrors.Views
         {
             if (SurfaceSelector == null) return;
             double radius = double.TryParse(RadiusInput.Text, out double r) ? r : 600;
-            if (((ComboBoxItem)SurfaceSelector.SelectedItem).Content.ToString() == "Curved Mirror") surfaces.Add(new CurvedMirror(radius) { Position = new Point(400, 250) });
-            else surfaces.Add(new PlaneMirror() { Position = new Point(400, 250) });
+            double length = double.TryParse(LengthInput.Text, out double l) ? l : 240;
+            double thickness = double.TryParse(ThicknessInput.Text, out double th) ? th : 100;
+            double index = double.TryParse(IndexInput.Text.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out double n) ? n : 1.5;
+
+            string selection = ((ComboBoxItem)SurfaceSelector.SelectedItem).Content.ToString();
+
+            if (selection == "Curved Mirror") surfaces.Add(new CurvedMirror(radius, length) { Position = new Point(400, 250) });
+            else if (selection == "Straight Mirror") surfaces.Add(new StraightMirror(length) { Position = new Point(400, 250) });
+            else surfaces.Add(new RefractionBlock(length, thickness, index) { Position = new Point(400, 250) });
+
             UpdateAndDraw();
         }
 
@@ -140,8 +158,8 @@ namespace UnfathomableMirrors.Views
         }
 
         private void Canvas_MouseUp(object sender, MouseButtonEventArgs e) { activeEmitter = null; activeSurface = null; UpdateAndDraw(); }
-        private void RadiusInput_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
+        private void NumberValidation(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
         private void ShowGuides_Click(object sender, RoutedEventArgs e) => UpdateAndDraw();
-        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING (Press 'A') | Right-Click to Delete" : "Mode: AIMING (Press 'A') | Right-Click to Delete"; UpdateAndDraw(); } }
+        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING ('A')" : "Mode: AIMING ('A')"; UpdateAndDraw(); } }
     }
 }

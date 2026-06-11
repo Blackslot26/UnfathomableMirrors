@@ -6,6 +6,8 @@ namespace UnfathomableMirrors.Models
     {
         Point Position { get; set; }
         double Angle { get; set; }
+        bool IsRefractive { get; }
+        double RefractiveIndex { get; }
         bool IsMouseOver(Point mousePos);
         void MoveTo(Point newPos);
         void AimAwayFrom(Point target);
