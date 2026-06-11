@@ -1,0 +1,36 @@
+# =========================
+# Visual Studio Code
+# =========================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Local History for Visual Studio Code
+.history/
+
+# =========================
+# Visual Studio
+# =========================
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# Build results (Optional but recommended for .NET/C++ projects)
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
