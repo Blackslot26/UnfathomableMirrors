@@ -23,6 +23,7 @@ namespace UnfathomableMirrors.Views
         public double Thickness { get; set; }
         public double RefractiveIndex { get; set; }
     }
+
     public class EmitterDto
     {
         public int Id { get; set; }
@@ -34,6 +35,7 @@ namespace UnfathomableMirrors.Views
         public double DispersionModifier { get; set; }
         public string ColorHex { get; set; }
     }
+
     public class SceneDto
     {
         public List<SurfaceDto> Surfaces { get; set; } = new List<SurfaceDto>();
@@ -53,6 +55,7 @@ namespace UnfathomableMirrors.Views
         private int colorIndex = 0;
         private bool isMeasuring = false;
         private Point? measureStart = null;
+        private Point? measureEnd = null;
         private SolidColorBrush[] rayColors = { Brushes.Blue, Brushes.Green, Brushes.DarkOrange, Brushes.Purple, Brushes.Teal, Brushes.Magenta, Brushes.DeepPink, Brushes.DarkCyan, Brushes.Indigo };
 
         public MainWindow()
@@ -111,13 +114,10 @@ namespace UnfathomableMirrors.Views
                 foreach (var segment in ray.Segments)
                 {
                     pathPoints.Add(segment.End);
-
                     if (segment.IsHitting && isPrimaryRay)
                     {
                         dataExport.Add(new { RayGrp = ray.GroupId, Wave = (int)ray.Wavelength + "nm", Bounce = hitOrder++, Action = segment.ActionType, Angle = Math.Round(segment.IncidenceAngleDeg, 1) + "°" });
-
                         if (showGuides) SimCanvas.Children.Add(new Line { X1 = segment.End.X, Y1 = segment.End.Y, X2 = segment.NormalEnd.X, Y2 = segment.NormalEnd.Y, Stroke = Brushes.Gray, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 2, 4 } });
-
                         TextBlock angleText = new TextBlock { Text = $"{Math.Round(segment.IncidenceAngleDeg, 1)}°", Foreground = Brushes.Black, Background = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)), Padding = new Thickness(2), FontSize = 11, FontWeight = FontWeights.Bold };
                         Canvas.SetLeft(angleText, segment.End.X + 10); Canvas.SetTop(angleText, segment.End.Y - 20); Canvas.SetZIndex(angleText, 100);
                         SimCanvas.Children.Add(angleText);
@@ -126,7 +126,25 @@ namespace UnfathomableMirrors.Views
 
                 SimCanvas.Children.Add(new Polyline { Points = pathPoints, Stroke = ray.RayColor, StrokeThickness = 2 });
 
-                if (ray.Id == emitters.Find(r => r.GroupId == ray.GroupId).Id)
+                Grid nozzleUI = new Grid { Width = 14, Height = 10, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new RotateTransform(ray.Angle * 180.0 / Math.PI) };
+                nozzleUI.Children.Add(new Rectangle { Fill = Brushes.DarkSlateGray, Stroke = Brushes.Black, StrokeThickness = 1, RadiusX = 1, RadiusY = 1 });
+                Canvas.SetLeft(nozzleUI, ray.Position.X - 7); Canvas.SetTop(nozzleUI, ray.Position.Y - 5); Canvas.SetZIndex(nozzleUI, 99);
+                SimCanvas.Children.Add(nozzleUI);
+
+                var groupRays = emitters.FindAll(r => r.GroupId == ray.GroupId);
+                if (groupRays.Count > 1 && ray.Id == groupRays[0].Id && ray.DispersionModifier == 0.0)
+                {
+                    bool isLaserGroup = false;
+                    foreach (var gr in groupRays) { if (gr.Position != ray.Position) { isLaserGroup = true; break; } }
+                    if (isLaserGroup)
+                    {
+                        Line housingBack = new Line { X1 = groupRays[0].Position.X, Y1 = groupRays[0].Position.Y, X2 = groupRays[groupRays.Count - 1].Position.X, Y2 = groupRays[groupRays.Count - 1].Position.Y, Stroke = Brushes.DimGray, StrokeThickness = 12, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
+                        Canvas.SetZIndex(housingBack, 98);
+                        SimCanvas.Children.Add(housingBack);
+                    }
+                }
+
+                if (ray.Id == groupRays[0].Id)
                 {
                     Grid emitterUI = new Grid { Width = 30, Height = 20, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new RotateTransform(ray.Angle * 180.0 / Math.PI) };
                     emitterUI.Children.Add(new Rectangle { Fill = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson, RadiusX = 3, RadiusY = 3 });
@@ -138,11 +156,35 @@ namespace UnfathomableMirrors.Views
 
             PhysicsDataTable.ItemsSource = dataExport;
 
-            if (isMeasuring && measureStart != null)
+            if (measureStart != null)
             {
-                Ellipse marker = new Ellipse { Width = 8, Height = 8, Fill = Brushes.Purple };
-                Canvas.SetLeft(marker, measureStart.Value.X - 4); Canvas.SetTop(marker, measureStart.Value.Y - 4);
-                SimCanvas.Children.Add(marker);
+                Point p1 = measureStart.Value;
+                Point p2 = (Mouse.LeftButton == MouseButtonState.Pressed && isMeasuring) ? mousePos : (measureEnd ?? mousePos);
+
+                SimCanvas.Children.Add(new Line { X1 = p1.X, Y1 = p1.Y, X2 = p2.X, Y2 = p2.Y, Stroke = Brushes.Purple, StrokeThickness = 2 });
+
+                double dx = p2.X - p1.X; double dy = p2.Y - p1.Y;
+                double dist = Math.Sqrt(dx * dx + dy * dy);
+
+                if (dist > 5)
+                {
+                    double ux = dx / dist; double uy = dy / dist;
+                    double nx = -uy; double ny = ux;
+
+                    for (double offset = 0; offset <= dist; offset += 20)
+                    {
+                        double tx = p1.X + ux * offset; double ty = p1.Y + uy * offset;
+                        double tickLen = ((int)Math.Round(offset) % 100 == 0) ? 10 : 5;
+                        SimCanvas.Children.Add(new Line { X1 = tx, Y1 = ty, X2 = tx + nx * tickLen, Y2 = ty + ny * tickLen, Stroke = Brushes.Purple, StrokeThickness = 1 });
+
+                        if ((int)Math.Round(offset) % 100 == 0 && offset > 0 && offset < dist - 10)
+                        {
+                            TextBlock tickText = new TextBlock { Text = $"{(int)offset}", Foreground = Brushes.Purple, FontSize = 9, FontWeight = FontWeights.Bold };
+                            Canvas.SetLeft(tickText, tx + nx * 12 - 5); Canvas.SetTop(tickText, ty + ny * 12 - 5);
+                            SimCanvas.Children.Add(tickText);
+                        }
+                    }
+                }
             }
 
             if ((activeEmitter != null || activeSurface != null) && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
@@ -210,11 +252,15 @@ namespace UnfathomableMirrors.Views
 
         private void AddWhiteLight_Click(object sender, RoutedEventArgs e)
         {
-            double[] wavelengths = { 400, 470, 550, 610, 700 };
+            int count = int.TryParse(RayDensityInput.Text, out int num) ? num : 5;
+            count = Math.Max(2, Math.Min(count, 35));
             int grp = groupCounter++;
-            for (int i = 0; i < wavelengths.Length; i++)
+            double startW = 400; double endW = 700;
+            double stepW = (endW - startW) / Math.Max(1, count - 1);
+
+            for (int i = 0; i < count; i++)
             {
-                double w = wavelengths[i];
+                double w = startW + i * stepW;
                 emitters.Add(new RayEmitter(rayCounter++, grp, 100, 150, WavelengthToBrush(w), 0, w, WavelengthToDispersion(w)));
             }
             UpdateAndDraw();
@@ -224,7 +270,10 @@ namespace UnfathomableMirrors.Views
         {
             double w = WavelengthSlider.Value;
             int grp = groupCounter++;
-            for (int i = 0; i < 360; i += 15) emitters.Add(new RayEmitter(rayCounter++, grp, 200, 300, WavelengthToBrush(w), i, w, WavelengthToDispersion(w)));
+            int count = int.TryParse(RayDensityInput.Text, out int num) ? num : 24;
+            count = Math.Max(4, Math.Min(count, 120));
+            double step = 360.0 / count;
+            for (int i = 0; i < count; i++) emitters.Add(new RayEmitter(rayCounter++, grp, 200, 300, WavelengthToBrush(w), i * step, w, WavelengthToDispersion(w)));
             UpdateAndDraw();
         }
 
@@ -232,33 +281,27 @@ namespace UnfathomableMirrors.Views
         {
             double w = WavelengthSlider.Value;
             int grp = groupCounter++;
-            for (int i = -30; i <= 30; i += 10) emitters.Add(new RayEmitter(rayCounter++, grp, 200, 300 + i, WavelengthToBrush(w), 0, w, WavelengthToDispersion(w)));
+            int count = int.TryParse(RayDensityInput.Text, out int num) ? num : 6;
+            count = Math.Max(1, Math.Min(count, 60));
+            double spacing = 12;
+            double startY = 300 - ((count - 1) * spacing / 2.0);
+            for (int i = 0; i < count; i++) emitters.Add(new RayEmitter(rayCounter++, grp, 200, startY + i * spacing, WavelengthToBrush(w), 0, w, WavelengthToDispersion(w)));
             UpdateAndDraw();
         }
 
         private void ToggleRuler_Click(object sender, RoutedEventArgs e)
         {
-            isMeasuring = !isMeasuring; measureStart = null;
-            MeasureLabel.Text = isMeasuring ? "Ruler Active" : "";
-            UpdateAndDraw();
-        }
-
-        private void HandleMeasurement(Point clickPos)
-        {
-            if (measureStart == null) { measureStart = clickPos; MeasureLabel.Text = "P1 Set. Click P2."; }
-            else
-            {
-                double distance = Math.Round(Math.Sqrt(Math.Pow(clickPos.X - measureStart.Value.X, 2) + Math.Pow(clickPos.Y - measureStart.Value.Y, 2)), 1);
-                MeasureLabel.Text = $"Dist: {distance} px";
-                measureStart = null; isMeasuring = false;
-            }
+            isMeasuring = !isMeasuring; measureStart = null; measureEnd = null;
+            MeasureLabel.Text = isMeasuring ? "Ruler: Click & Drag" : "";
             UpdateAndDraw();
         }
 
         private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            mousePos = e.GetPosition(SimCanvas);
-            if (isMeasuring) { HandleMeasurement(mousePos); return; }
+            Point currentClick = e.GetPosition(SimCanvas);
+            if (isMeasuring) { measureStart = currentClick; measureEnd = null; UpdateAndDraw(); return; }
+            mousePos = currentClick;
+
             if (e.ChangedButton == MouseButton.Right)
             {
                 var toDelete = emitters.Find(r => r.IsMouseOver(mousePos));
@@ -268,35 +311,62 @@ namespace UnfathomableMirrors.Views
             }
             activeEmitter = emitters.Find(r => r.IsMouseOver(mousePos));
             if (activeEmitter == null) activeSurface = surfaces.Find(s => s.IsMouseOver(mousePos));
-            if ((activeEmitter != null || activeSurface != null) && !isMovingMode)
-            {
-                if (activeEmitter != null) foreach (var em in emitters.FindAll(r => r.GroupId == activeEmitter.GroupId)) em.AimAwayFrom(mousePos);
-                activeSurface?.AimAwayFrom(mousePos); UpdateAndDraw();
-            }
         }
 
         private void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
+            Point newMousePos = e.GetPosition(SimCanvas);
+            double deltaX = newMousePos.X - mousePos.X;
+            double deltaY = newMousePos.Y - mousePos.Y;
+            mousePos = newMousePos;
+
+            if (isMeasuring && measureStart != null && e.LeftButton == MouseButtonState.Pressed) { UpdateAndDraw(); return; }
             if (e.LeftButton != MouseButtonState.Pressed) return;
-            mousePos = e.GetPosition(SimCanvas);
+
             if (activeEmitter != null)
             {
-                if (isMovingMode) foreach (var em in emitters.FindAll(r => r.GroupId == activeEmitter.GroupId)) em.MoveTo(mousePos);
-                else foreach (var em in emitters.FindAll(r => r.GroupId == activeEmitter.GroupId)) em.AimAwayFrom(mousePos);
+                var groupRays = emitters.FindAll(r => r.GroupId == activeEmitter.GroupId);
+                if (isMovingMode)
+                {
+                    foreach (var em in groupRays) em.MoveTo(new Point(em.Position.X + deltaX, em.Position.Y + deltaY));
+                }
+                else
+                {
+                    double rawAngle = Math.Atan2(activeEmitter.Position.Y - newMousePos.Y, activeEmitter.Position.X - newMousePos.X);
+                    double snappedAngleDeg = Math.Round(rawAngle * 180.0 / Math.PI);
+                    double newAngleRad = snappedAngleDeg * Math.PI / 180.0;
+                    bool isLamp = groupRays.Count > 10;
+                    if (isLamp)
+                    {
+                        double step = 360.0 / groupRays.Count; int lampIndex = 0;
+                        foreach (var em in groupRays) { em.SetAngleDegrees((newAngleRad * 180.0 / Math.PI) + (lampIndex * step)); lampIndex++; }
+                    }
+                    else { foreach (var em in groupRays) em.SetAngleDegrees(newAngleRad * 180.0 / Math.PI); }
+                }
             }
-            else if (activeSurface != null) { if (isMovingMode) activeSurface.MoveTo(mousePos); else activeSurface.AimAwayFrom(mousePos); }
+            else if (activeSurface != null)
+            {
+                if (isMovingMode) activeSurface.MoveTo(new Point(activeSurface.Position.X + deltaX, activeSurface.Position.Y + deltaY));
+                else activeSurface.AimAwayFrom(newMousePos);
+            }
             UpdateAndDraw();
         }
 
-        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e) { activeEmitter = null; activeSurface = null; UpdateAndDraw(); }
+        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (isMeasuring && measureStart != null)
+            {
+                measureEnd = e.GetPosition(SimCanvas);
+                double distance = Math.Round(Math.Sqrt(Math.Pow(measureEnd.Value.X - measureStart.Value.X, 2) + Math.Pow(measureEnd.Value.Y - measureStart.Value.Y, 2)), 1);
+                MeasureLabel.Text = $"Dist: {distance} px";
+            }
+            activeEmitter = null; activeSurface = null; UpdateAndDraw();
+        }
+
         private void NumberValidation(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
         private void ShowGuides_Click(object sender, RoutedEventArgs e) => UpdateAndDraw();
         private void WavelengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (WavelengthLabel != null) WavelengthLabel.Text = $"{(int)WavelengthSlider.Value} nm"; }
-
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING" : "Mode: AIMING"; ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson; UpdateAndDraw(); }
-        }
+        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Mode: MOVING" : "Mode: AIMING"; ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson; UpdateAndDraw(); } }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
