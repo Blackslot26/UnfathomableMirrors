@@ -7,7 +7,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using UnfathomableMirrors.Models;
 
 namespace UnfathomableMirrors.Views
@@ -42,77 +41,25 @@ namespace UnfathomableMirrors.Views
             Brushes.Cyan, Brushes.Magenta, Brushes.HotPink, Brushes.SpringGreen, Brushes.Gold
         };
 
-        private List<Line> linePool = new List<Line>();
-        private int lineIndex = 0;
-        private List<Polyline> polylinePool = new List<Polyline>();
-        private int polylineIndex = 0;
-        private List<TextBlock> textPool = new List<TextBlock>();
-        private int textIndex = 0;
-        private List<Path> pathPool = new List<Path>();
-        private int pathIndex = 0;
-        private List<Polygon> polygonPool = new List<Polygon>();
-        private int polygonIndex = 0;
-        private List<Ellipse> ellipsePool = new List<Ellipse>();
-        private int ellipseIndex = 0;
-        private List<Grid> nozzlePool = new List<Grid>();
-        private int nozzleIndex = 0;
-        private List<Grid> emitterUiPool = new List<Grid>();
-        private int emitterUiIndex = 0;
+        private DrawingVisualHost drawingHost;
 
         public MainWindow()
         {
             InitializeComponent();
             ApplyTheme();
+
+            drawingHost = new DrawingVisualHost();
+            SimCanvas.Children.Add(drawingHost);
+
             surfaces.Add(new BiconvexLens(250, 100, 1.5) { Position = new Point(700, 300) });
             emitters.Add(new RayEmitter(rayCounter++, groupCounter++, 200, 300, WavelengthToBrush(550), 0, 550, 0));
+
             Loaded += (s, e) =>
             {
                 if (ModeLabel != null) ModeLabel.Text = "Modo: MOVER (Tecla 'A')";
                 UpdateAndDraw();
             };
             SizeChanged += (s, e) => UpdateAndDraw();
-        }
-
-        private T GetPooledElement<T>(List<T> pool, ref int index) where T : UIElement, new()
-        {
-            if (index >= pool.Count)
-            {
-                var element = new T();
-                pool.Add(element);
-                SimCanvas.Children.Add(element);
-            }
-            var item = pool[index++];
-            item.Visibility = Visibility.Visible;
-            return item;
-        }
-
-        private Grid GetNozzle()
-        {
-            if (nozzleIndex >= nozzlePool.Count)
-            {
-                Grid nozzleUI = new Grid { Width = 14, Height = 10 };
-                nozzleUI.Children.Add(new Rectangle { Fill = Brushes.DarkSlateGray, Stroke = Brushes.Black, StrokeThickness = 1, RadiusX = 1, RadiusY = 1 });
-                nozzlePool.Add(nozzleUI);
-                SimCanvas.Children.Add(nozzleUI);
-            }
-            var item = nozzlePool[nozzleIndex++];
-            item.Visibility = Visibility.Visible;
-            return item;
-        }
-
-        private Grid GetEmitterUI()
-        {
-            if (emitterUiIndex >= emitterUiPool.Count)
-            {
-                Grid emitterUI = new Grid { Width = 30, Height = 20 };
-                emitterUI.Children.Add(new Rectangle { RadiusX = 3, RadiusY = 3 });
-                emitterUI.Children.Add(new TextBlock { Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold });
-                emitterUiPool.Add(emitterUI);
-                SimCanvas.Children.Add(emitterUI);
-            }
-            var item = emitterUiPool[emitterUiIndex++];
-            item.Visibility = Visibility.Visible;
-            return item;
         }
 
         private void ToggleTheme_Click(object sender, RoutedEventArgs e)
@@ -182,16 +129,7 @@ namespace UnfathomableMirrors.Views
 
         private void UpdateAndDraw()
         {
-            if (SimCanvas == null) return;
-
-            lineIndex = 0; polylineIndex = 0; textIndex = 0; pathIndex = 0; polygonIndex = 0; ellipseIndex = 0; nozzleIndex = 0; emitterUiIndex = 0;
-            foreach (UIElement child in SimCanvas.Children) child.Visibility = Visibility.Hidden;
-
-            foreach (var surface in surfaces)
-            {
-                surface.UpdateDimensions(SimCanvas.ActualWidth, SimCanvas.ActualHeight);
-                DrawSurface(surface);
-            }
+            if (SimCanvas == null || drawingHost == null) return;
 
             bool showGuides = ShowGuidesCheck?.IsChecked ?? false;
             var dataExport = new List<object>();
@@ -200,134 +138,169 @@ namespace UnfathomableMirrors.Views
             bool tieneRefraccion = false;
             bool tieneRIT = false;
 
-            foreach (var ray in emitters)
+            using (DrawingContext dc = drawingHost.Visual.RenderOpen())
             {
-                ray.UpdatePhysics(surfaces);
-                int hitOrder = 1;
-                bool isPrimaryRay = ray.DispersionModifier == 0.0 || ray.Id == emitters.Find(r => r.GroupId == ray.GroupId).Id;
+                Brush strokeBrush = isDarkTheme ? Brushes.LightGray : Brushes.DarkBlue;
+                Brush mirrorLineBrush = isDarkTheme ? Brushes.WhiteSmoke : Brushes.Black;
+                Pen surfacePen = new Pen(strokeBrush, 1);
+                Pen mirrorPen = new Pen(mirrorLineBrush, 4);
+                Pen straightMirrorPen = new Pen(mirrorLineBrush, 5);
 
-                PointCollection pathPoints = new PointCollection();
-                if (ray.Segments.Count > 0) pathPoints.Add(ray.Segments[0].Start);
-
-                foreach (var segment in ray.Segments)
+                foreach (var surface in surfaces)
                 {
-                    pathPoints.Add(segment.End);
-                    if (segment.IsHitting && isPrimaryRay)
+                    surface.UpdateDimensions(SimCanvas.ActualWidth, SimCanvas.ActualHeight);
+
+                    if (surface is BiconvexLens lens)
                     {
-                        string tipoEspanol = "Desconocido";
-                        if (segment.ActionType == "Reflection") { tipoEspanol = "Reflexión"; tieneReflexion = true; }
-                        else if (segment.ActionType == "Refraction") { tipoEspanol = "Refracción"; tieneRefraccion = true; }
-                        else if (segment.ActionType == "TIR") { tipoEspanol = "R.I.T."; tieneRIT = true; }
-
-                        dataExport.Add(new { Grupo = ray.GroupId, Espectro = (int)ray.Wavelength + " nm", Impacto = hitOrder++, Fenómeno = tipoEspanol, Ángulo = Math.Round(segment.IncidenceAngleDeg, 1) + "°" });
-
-                        if (showGuides)
+                        var geo = new CombinedGeometry(GeometryCombineMode.Intersect, new EllipseGeometry(lens.C1, lens.Radius, lens.Radius), new EllipseGeometry(lens.C2, lens.Radius, lens.Radius));
+                        dc.DrawGeometry(lensBrush, surfacePen, geo);
+                    }
+                    else if (surface is RefractionBlock block)
+                    {
+                        StreamGeometry streamGeometry = new StreamGeometry();
+                        using (StreamGeometryContext geometryContext = streamGeometry.Open())
                         {
-                            Line guide = GetPooledElement(linePool, ref lineIndex);
-                            guide.X1 = segment.End.X; guide.Y1 = segment.End.Y; guide.X2 = segment.NormalEnd.X; guide.Y2 = segment.NormalEnd.Y;
-                            guide.Stroke = Brushes.DimGray; guide.StrokeThickness = 1; guide.StrokeDashArray = new DoubleCollection { 2, 4 };
+                            geometryContext.BeginFigure(block.Corners[0], true, true);
+                            for (int i = 1; i < 4; i++) geometryContext.LineTo(block.Corners[i], true, false);
                         }
-
-                        TextBlock angleText = GetPooledElement(textPool, ref textIndex);
-                        angleText.Text = $"{Math.Round(segment.IncidenceAngleDeg, 1)}°";
-                        angleText.Foreground = Brushes.White; angleText.Background = tooltipBgBrush; angleText.Padding = new Thickness(3); angleText.FontSize = 11; angleText.FontWeight = FontWeights.Bold;
-                        Canvas.SetLeft(angleText, segment.End.X + 10); Canvas.SetTop(angleText, segment.End.Y - 20); Canvas.SetZIndex(angleText, 100);
+                        dc.DrawGeometry(blockBrush, surfacePen, streamGeometry);
                     }
-                }
-
-                Polyline glow = GetPooledElement(polylinePool, ref polylineIndex);
-                glow.Points = pathPoints; glow.Stroke = ray.RayColor; glow.StrokeThickness = 6; glow.Opacity = 0.2;
-
-                Polyline core = GetPooledElement(polylinePool, ref polylineIndex);
-                core.Points = pathPoints; core.Stroke = ray.RayColor; core.StrokeThickness = 2; core.Opacity = 1.0;
-
-                Grid nozzleUI = GetNozzle();
-                nozzleUI.RenderTransformOrigin = new Point(0.5, 0.5); nozzleUI.RenderTransform = new RotateTransform(ray.Angle * 180.0 / Math.PI);
-                Canvas.SetLeft(nozzleUI, ray.Position.X - 7); Canvas.SetTop(nozzleUI, ray.Position.Y - 5); Canvas.SetZIndex(nozzleUI, 99);
-
-                var groupRays = emitters.FindAll(r => r.GroupId == ray.GroupId);
-                if (groupRays.Count > 1 && ray.Id == groupRays[0].Id && ray.DispersionModifier == 0.0)
-                {
-                    bool isLaserGroup = false;
-                    foreach (var gr in groupRays) { if (gr.Position != ray.Position) { isLaserGroup = true; break; } }
-                    if (isLaserGroup)
+                    else if (surface is CurvedMirror curved)
                     {
-                        Line housingBack = GetPooledElement(linePool, ref lineIndex);
-                        housingBack.X1 = groupRays[0].Position.X; housingBack.Y1 = groupRays[0].Position.Y; housingBack.X2 = groupRays[groupRays.Count - 1].Position.X; housingBack.Y2 = groupRays[groupRays.Count - 1].Position.Y;
-                        housingBack.Stroke = Brushes.DimGray; housingBack.StrokeThickness = 12; housingBack.StrokeStartLineCap = PenLineCap.Round; housingBack.StrokeEndLineCap = PenLineCap.Round; housingBack.StrokeDashArray = null;
-                        Canvas.SetZIndex(housingBack, 98);
+                        StreamGeometry streamGeometry = new StreamGeometry();
+                        using (StreamGeometryContext geometryContext = streamGeometry.Open())
+                        {
+                            double expectedAngle = curved.Angle + Math.PI;
+                            Point pStart = new Point(curved.Center.X + curved.Radius * Math.Cos(expectedAngle - curved.MaxAngle), curved.Center.Y + curved.Radius * Math.Sin(expectedAngle - curved.MaxAngle));
+                            Point pEnd = new Point(curved.Center.X + curved.Radius * Math.Cos(expectedAngle + curved.MaxAngle), curved.Center.Y + curved.Radius * Math.Sin(expectedAngle + curved.MaxAngle));
+
+                            geometryContext.BeginFigure(pStart, false, false);
+                            geometryContext.ArcTo(pEnd, new Size(curved.Radius, curved.Radius), 0, false, SweepDirection.Clockwise, true, false);
+                        }
+                        dc.DrawGeometry(null, mirrorPen, streamGeometry);
+                    }
+                    else if (surface is StraightMirror straight)
+                    {
+                        dc.DrawLine(straightMirrorPen, straight.StartPoint, straight.EndPoint);
+                    }
+
+                    dc.DrawEllipse(handleBrush, null, surface.Position, 5, 5);
+                }
+
+                foreach (var ray in emitters)
+                {
+                    ray.UpdatePhysics(surfaces);
+                    int hitOrder = 1;
+                    bool isPrimaryRay = ray.DispersionModifier == 0.0 || ray.Id == emitters.Find(r => r.GroupId == ray.GroupId).Id;
+
+                    Color c = ray.RayColor.Color;
+                    SolidColorBrush glowBrush = new SolidColorBrush(Color.FromArgb(51, c.R, c.G, c.B));
+                    Pen glowPen = new Pen(glowBrush, 6);
+                    Pen corePen = new Pen(ray.RayColor, 2);
+
+                    for (int s = 0; s < ray.Segments.Count; s++)
+                    {
+                        var segment = ray.Segments[s];
+                        dc.DrawLine(glowPen, segment.Start, segment.End);
+                        dc.DrawLine(corePen, segment.Start, segment.End);
+
+                        if (segment.IsHitting && isPrimaryRay)
+                        {
+                            string tipoEspanol = "Desconocido";
+                            if (segment.ActionType == "Reflection") { tipoEspanol = "Reflexión"; tieneReflexion = true; }
+                            else if (segment.ActionType == "Refraction") { tipoEspanol = "Refracción"; tieneRefraccion = true; }
+                            else if (segment.ActionType == "TIR") { tipoEspanol = "R.I.T."; tieneRIT = true; }
+
+                            dataExport.Add(new { Grupo = ray.GroupId, Espectro = (int)ray.Wavelength + " nm", Impacto = hitOrder++, Fenómeno = tipoEspanol, Ángulo = Math.Round(segment.IncidenceAngleDeg, 1) + "°" });
+
+                            if (showGuides) dc.DrawLine(new Pen(Brushes.Gray, 1) { DashStyle = DashStyles.Dash }, segment.End, segment.NormalEnd);
+
+                            FormattedText formatAngle = new FormattedText($"{Math.Round(segment.IncidenceAngleDeg, 1)}°", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                            dc.DrawRectangle(tooltipBgBrush, null, new Rect(segment.End.X + 10, segment.End.Y - 20, formatAngle.Width + 6, formatAngle.Height + 6));
+                            dc.DrawText(formatAngle, new Point(segment.End.X + 13, segment.End.Y - 17));
+                        }
+                    }
+
+                    dc.PushTransform(new TranslateTransform(ray.Position.X, ray.Position.Y));
+                    dc.PushTransform(new RotateTransform(ray.Angle * 180.0 / Math.PI));
+                    dc.DrawRectangle(Brushes.DarkSlateGray, new Pen(Brushes.Black, 1), new Rect(-7, -5, 14, 10));
+                    dc.Pop(); dc.Pop();
+
+                    var groupRays = emitters.FindAll(r => r.GroupId == ray.GroupId);
+                    if (groupRays.Count > 1 && ray.Id == groupRays[0].Id && ray.DispersionModifier == 0.0)
+                    {
+                        bool isLaserGroup = false;
+                        foreach (var gr in groupRays) { if (gr.Position != ray.Position) { isLaserGroup = true; break; } }
+                        if (isLaserGroup)
+                        {
+                            dc.DrawLine(new Pen(Brushes.DimGray, 12) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, groupRays[0].Position, groupRays[groupRays.Count - 1].Position);
+                        }
+                    }
+
+                    if (ray.Id == groupRays[0].Id)
+                    {
+                        Brush uiBrush = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
+                        dc.PushTransform(new TranslateTransform(ray.Position.X, ray.Position.Y));
+                        dc.PushTransform(new RotateTransform(ray.Angle * 180.0 / Math.PI));
+                        dc.DrawRectangle(uiBrush, null, new Rect(-15, -10, 30, 20));
+
+                        FormattedText idText = new FormattedText(ray.GroupId.ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), 11, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                        dc.DrawText(idText, new Point(-idText.Width / 2.0, -idText.Height / 2.0));
+                        dc.Pop(); dc.Pop();
                     }
                 }
 
-                if (ray.Id == groupRays[0].Id)
+                if (measureStart != null)
                 {
-                    Grid emitterUI = GetEmitterUI();
-                    emitterUI.RenderTransformOrigin = new Point(0.5, 0.5); emitterUI.RenderTransform = new RotateTransform(ray.Angle * 180.0 / Math.PI);
-                    ((Rectangle)emitterUI.Children[0]).Fill = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
-                    ((TextBlock)emitterUI.Children[1]).Text = ray.GroupId.ToString();
-                    Canvas.SetLeft(emitterUI, ray.Position.X - 15); Canvas.SetTop(emitterUI, ray.Position.Y - 10); Canvas.SetZIndex(emitterUI, 101);
+                    Point p1 = measureStart.Value;
+                    Point p2 = (Mouse.LeftButton == MouseButtonState.Pressed && isMeasuring) ? mousePos : (measureEnd ?? mousePos);
+
+                    dc.DrawLine(new Pen(Brushes.DeepSkyBlue, 2), p1, p2);
+
+                    double dx = p2.X - p1.X; double dy = p2.Y - p1.Y;
+                    double distPx = Math.Sqrt(dx * dx + dy * dy);
+                    double distCm = distPx * (2.54 / 96.0);
+
+                    if (MeasureLabel != null) MeasureLabel.Text = $"Regla: {Math.Round(distCm, 1)} cm";
+
+                    FormattedText formatCm = new FormattedText($"{Math.Round(distCm, 1)} cm", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                    dc.DrawRectangle(Brushes.DeepSkyBlue, null, new Rect(p2.X + 12, p2.Y - 22, formatCm.Width + 8, formatCm.Height + 4));
+                    dc.DrawText(formatCm, new Point(p2.X + 16, p2.Y - 20));
+
+                    if (distPx > 5)
+                    {
+                        double ux = dx / distPx; double uy = dy / distPx;
+                        double nx = -uy; double ny = ux;
+                        double pxPerCm = 96.0 / 2.54;
+
+                        for (double cm = 0; cm <= distCm; cm += 0.5)
+                        {
+                            double offsetPx = cm * pxPerCm;
+                            if (offsetPx > distPx) break;
+
+                            double tx = p1.X + ux * offsetPx; double ty = p1.Y + uy * offsetPx;
+                            bool esEnteroCm = Math.Abs(cm - Math.Round(cm)) < 0.01;
+                            double tickLen = esEnteroCm ? 12 : 6;
+
+                            dc.DrawLine(new Pen(Brushes.DeepSkyBlue, esEnteroCm ? 1.5 : 1), new Point(tx, ty), new Point(tx + nx * tickLen, ty + ny * tickLen));
+
+                            if (esEnteroCm && cm > 0 && offsetPx < distPx - 15)
+                            {
+                                FormattedText cmTick = new FormattedText($"{Math.Round(cm)} cm", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 9, Brushes.DeepSkyBlue, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                                dc.DrawText(cmTick, new Point(tx + nx * 16 - 4, ty + ny * 16 - 5));
+                            }
+                        }
+                    }
+                }
+
+                if ((activeEmitter != null || activeSurface != null) && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
+                {
+                    Point startPoint = activeEmitter != null ? activeEmitter.Position : activeSurface.Position;
+                    dc.DrawLine(new Pen(Brushes.LightGray, 1) { DashStyle = DashStyles.Dash }, startPoint, mousePos);
                 }
             }
 
             PhysicsDataTable.ItemsSource = dataExport;
-            UpdateFormulasPanel(tieneReflexion, tieneRefraccion, tieneRIT);
-
-            if (measureStart != null)
-            {
-                Point p1 = measureStart.Value;
-                Point p2 = (Mouse.LeftButton == MouseButtonState.Pressed && isMeasuring) ? mousePos : (measureEnd ?? mousePos);
-
-                Line mainRuler = GetPooledElement(linePool, ref lineIndex);
-                mainRuler.X1 = p1.X; mainRuler.Y1 = p1.Y; mainRuler.X2 = p2.X; mainRuler.Y2 = p2.Y;
-                mainRuler.Stroke = Brushes.DeepSkyBlue; mainRuler.StrokeThickness = 2; mainRuler.StrokeDashArray = null;
-
-                double dx = p2.X - p1.X;
-                double dy = p2.Y - p1.Y;
-                double distPx = Math.Sqrt(dx * dx + dy * dy);
-                double distCm = distPx * (2.54 / 96.0);
-
-                if (MeasureLabel != null)
-                    MeasureLabel.Text = $"Regla: {Math.Round(distCm, 1)} cm";
-
-                TextBlock floatingTooltip = GetPooledElement(textPool, ref textIndex);
-                floatingTooltip.Text = $"{Math.Round(distCm, 1)} cm"; floatingTooltip.Foreground = Brushes.White; floatingTooltip.Background = Brushes.DeepSkyBlue; floatingTooltip.Padding = new Thickness(4, 2, 4, 2); floatingTooltip.FontSize = 11; floatingTooltip.FontWeight = FontWeights.Bold;
-                Canvas.SetLeft(floatingTooltip, p2.X + 12); Canvas.SetTop(floatingTooltip, p2.Y - 22); Canvas.SetZIndex(floatingTooltip, 120);
-
-                if (distPx > 5)
-                {
-                    double ux = dx / distPx; double uy = dy / distPx;
-                    double nx = -uy; double ny = ux;
-                    double pxPerCm = 96.0 / 2.54;
-
-                    for (double cm = 0; cm <= distCm; cm += 0.5)
-                    {
-                        double offsetPx = cm * pxPerCm;
-                        if (offsetPx > distPx) break;
-
-                        double tx = p1.X + ux * offsetPx; double ty = p1.Y + uy * offsetPx;
-                        bool esEnteroCm = Math.Abs(cm - Math.Round(cm)) < 0.01;
-                        double tickLen = esEnteroCm ? 12 : 6;
-
-                        Line tick = GetPooledElement(linePool, ref lineIndex);
-                        tick.X1 = tx; tick.Y1 = ty; tick.X2 = tx + nx * tickLen; tick.Y2 = ty + ny * tickLen; tick.Stroke = Brushes.DeepSkyBlue; tick.StrokeThickness = esEnteroCm ? 1.5 : 1; tick.StrokeDashArray = null;
-
-                        if (esEnteroCm && cm > 0 && offsetPx < distPx - 15)
-                        {
-                            TextBlock tickText = GetPooledElement(textPool, ref textIndex);
-                            tickText.Text = $"{Math.Round(cm)} cm"; tickText.Foreground = Brushes.DeepSkyBlue; tickText.Background = Brushes.Transparent; tickText.Padding = new Thickness(0); tickText.FontSize = 9; tickText.FontWeight = FontWeights.Bold;
-                            Canvas.SetLeft(tickText, tx + nx * 16 - 8); Canvas.SetTop(tickText, ty + ny * 16 - 5); Canvas.SetZIndex(tickText, 100);
-                        }
-                    }
-                }
-            }
-
-            if ((activeEmitter != null || activeSurface != null) && !isMovingMode && Mouse.LeftButton == MouseButtonState.Pressed)
-            {
-                Point startPoint = activeEmitter != null ? activeEmitter.Position : activeSurface.Position;
-                Line aimLine = GetPooledElement(linePool, ref lineIndex);
-                aimLine.X1 = startPoint.X; aimLine.Y1 = startPoint.Y; aimLine.X2 = mousePos.X; aimLine.Y2 = mousePos.Y;
-                aimLine.Stroke = Brushes.LightGray; aimLine.StrokeThickness = 1; aimLine.StrokeDashArray = new DoubleCollection { 3, 3 };
-            }
         }
 
         private void UpdateFormulasPanel(bool reflek, bool refrak, bool rit)
@@ -338,46 +311,7 @@ namespace UnfathomableMirrors.Views
             if (refrak) txt += "• Ley de Snell (Refracción):\n  n1 · sin(θi) = n2 · sin(θt)\n  Desviación por cambio de medio.\n\n";
             if (rit) txt += "• Reflexión Interna Total (R.I.T):\n  θi ≥ θc = arcsin(n2 / n1)\n  Luz confinada en medio denso.\n\n";
             if (!reflek && !refrak && !rit) txt += "Dispare haces luminosos hacia los componentes para desplegar ecuaciones analíticas aplicadas.";
-
             if (FormulasTextBlock.Text != txt) FormulasTextBlock.Text = txt;
-        }
-
-        private void DrawSurface(IOpticSurface surface)
-        {
-            Brush strokeBrush = isDarkTheme ? Brushes.LightGray : Brushes.DarkBlue;
-            Brush mirrorLineBrush = isDarkTheme ? Brushes.WhiteSmoke : Brushes.Black;
-
-            if (surface is BiconvexLens lens)
-            {
-                Path path = GetPooledElement(pathPool, ref pathIndex);
-                path.Data = new CombinedGeometry(GeometryCombineMode.Intersect, new EllipseGeometry(lens.C1, lens.Radius, lens.Radius), new EllipseGeometry(lens.C2, lens.Radius, lens.Radius));
-                path.Fill = lensBrush; path.Stroke = strokeBrush; path.StrokeThickness = 1;
-            }
-            else if (surface is RefractionBlock block)
-            {
-                Polygon rect = GetPooledElement(polygonPool, ref polygonIndex);
-                rect.Points.Clear(); foreach (var p in block.Corners) rect.Points.Add(p);
-                rect.Fill = blockBrush; rect.Stroke = strokeBrush; rect.StrokeThickness = 1;
-            }
-            else if (surface is CurvedMirror curved)
-            {
-                Path path = GetPooledElement(pathPool, ref pathIndex);
-                PathGeometry pg = new PathGeometry(); PathFigure pf = new PathFigure();
-                double expectedAngle = curved.Angle + Math.PI;
-                pf.StartPoint = new Point(curved.Center.X + curved.Radius * Math.Cos(expectedAngle - curved.MaxAngle), curved.Center.Y + curved.Radius * Math.Sin(expectedAngle - curved.MaxAngle));
-                pf.Segments.Add(new ArcSegment { Point = new Point(curved.Center.X + curved.Radius * Math.Cos(expectedAngle + curved.MaxAngle), curved.Center.Y + curved.Radius * Math.Sin(expectedAngle + curved.MaxAngle)), Size = new Size(curved.Radius, curved.Radius), SweepDirection = SweepDirection.Clockwise });
-                pg.Figures.Add(pf); path.Data = pg; path.Stroke = mirrorLineBrush; path.StrokeThickness = 4; path.Fill = null;
-            }
-            else if (surface is StraightMirror straight)
-            {
-                Line line = GetPooledElement(linePool, ref lineIndex);
-                line.X1 = straight.StartPoint.X; line.Y1 = straight.StartPoint.Y; line.X2 = straight.EndPoint.X; line.Y2 = straight.EndPoint.Y;
-                line.Stroke = mirrorLineBrush; line.StrokeThickness = 5; line.StrokeDashArray = null;
-            }
-
-            Ellipse dragHandle = GetPooledElement(ellipsePool, ref ellipseIndex);
-            dragHandle.Width = 10; dragHandle.Height = 10; dragHandle.Fill = handleBrush; dragHandle.Cursor = Cursors.SizeAll;
-            Canvas.SetLeft(dragHandle, surface.Position.X - 5); Canvas.SetTop(dragHandle, surface.Position.Y - 5); Canvas.SetZIndex(dragHandle, 10);
         }
 
         private void AddSurface_Click(object sender, RoutedEventArgs e)
@@ -454,17 +388,11 @@ namespace UnfathomableMirrors.Views
             Point currentClick = e.GetPosition(SimCanvas);
             if (isMeasuring)
             {
-                if (e.ChangedButton == MouseButton.Left)
-                {
-                    measureStart = currentClick;
-                    measureEnd = null;
-                    UpdateAndDraw();
-                }
+                if (e.ChangedButton == MouseButton.Left) { measureStart = currentClick; measureEnd = null; UpdateAndDraw(); }
                 return;
             }
             mousePos = currentClick;
-            measureStart = null;
-            measureEnd = null;
+            measureStart = null; measureEnd = null;
 
             if (e.ChangedButton == MouseButton.Right)
             {
@@ -553,20 +481,7 @@ namespace UnfathomableMirrors.Views
         private void NumberValidation(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
         private void ShowGuides_Click(object sender, RoutedEventArgs e) => UpdateAndDraw();
         private void WavelengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (WavelengthLabel != null) WavelengthLabel.Text = $"{(int)WavelengthSlider.Value} nm"; }
-
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.A)
-            {
-                isMovingMode = !isMovingMode;
-                if (ModeLabel != null)
-                {
-                    ModeLabel.Text = isMovingMode ? "Modo: MOVER (Tecla 'A')" : "Modo: APUNTAR (Tecla 'A')";
-                    ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
-                }
-                UpdateAndDraw();
-            }
-        }
+        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Modo: MOVER (Tecla 'A')" : "Modo: APUNTAR (Tecla 'A')"; ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson; UpdateAndDraw(); } }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
@@ -615,5 +530,20 @@ namespace UnfathomableMirrors.Views
                 catch (Exception ex) { MessageBox.Show("Error al cargar: " + ex.Message); }
             }
         }
+    }
+
+    public class DrawingVisualHost : FrameworkElement
+    {
+        private readonly VisualCollection _children;
+        public DrawingVisual Visual { get; }
+
+        public DrawingVisualHost()
+        {
+            Visual = new DrawingVisual();
+            _children = new VisualCollection(this) { Visual };
+        }
+
+        protected override int VisualChildrenCount => _children.Count;
+        protected override Visual GetVisualChild(int index) => _children[index];
     }
 }
