@@ -5,7 +5,81 @@
         Height="820"
         Width="1450"
         KeyDown="Window_KeyDown"
-        Background="#FAFAFA">
+        Background="{DynamicResource WindowBg}">
+        <Window.Resources>
+                <SolidColorBrush x:Key="WindowBg"
+                                 Color="#F0F2F5"/>
+                <SolidColorBrush x:Key="PanelBg"
+                                 Color="#FFFFFF"/>
+                <SolidColorBrush x:Key="TextFg"
+                                 Color="#1F2937"/>
+                <SolidColorBrush x:Key="BorderColor"
+                                 Color="#D1D5DB"/>
+                <SolidColorBrush x:Key="CanvasBg"
+                                 Color="#FAFAFA"/>
+                <SolidColorBrush x:Key="HeaderBg"
+                                 Color="#E5E7EB"/>
+
+                <Style TargetType="TextBlock">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                </Style>
+                <Style TargetType="CheckBox">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                </Style>
+                <Style TargetType="GroupBox">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                </Style>
+                <Style TargetType="TabItem">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                        <Setter Property="Background"
+                                Value="{DynamicResource PanelBg}"/>
+                </Style>
+                <Style TargetType="TextBox">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                        <Setter Property="Background"
+                                Value="{DynamicResource WindowBg}"/>
+                        <Setter Property="BorderBrush"
+                                Value="{DynamicResource BorderColor}"/>
+                </Style>
+                <Style TargetType="ComboBox">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                        <Setter Property="Background"
+                                Value="{DynamicResource WindowBg}"/>
+                        <Setter Property="BorderBrush"
+                                Value="{DynamicResource BorderColor}"/>
+                </Style>
+                <Style TargetType="ComboBoxItem">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                        <Setter Property="Background"
+                                Value="{DynamicResource PanelBg}"/>
+                </Style>
+                <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background"
+                                Value="{DynamicResource HeaderBg}"/>
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                        <Setter Property="BorderBrush"
+                                Value="{DynamicResource BorderColor}"/>
+                        <Setter Property="BorderThickness"
+                                Value="0,0,1,1"/>
+                        <Setter Property="Padding"
+                                Value="5"/>
+                </Style>
+                <Style TargetType="DataGridCell">
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFg}"/>
+                        <Setter Property="BorderThickness"
+                                Value="0"/>
+                </Style>
+        </Window.Resources>
+
         <Grid>
                 <Grid.RowDefinitions>
                         <RowDefinition Height="55"/>
@@ -20,16 +94,26 @@
 
                 <Border Grid.Row="0"
                         Grid.ColumnSpan="3"
-                        BorderBrush="LightGray"
+                        BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="0,0,0,1"
-                        Background="White">
+                        Background="{DynamicResource PanelBg}">
                         <StackPanel Orientation="Horizontal"
                                     VerticalAlignment="Center"
                                     Margin="15,0">
+                                <Button Content="🌙 Tema"
+                                        Click="ToggleTheme_Click"
+                                        Padding="12,6"
+                                        Background="#4B5563"
+                                        Foreground="White"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        FontWeight="Bold"/>
                                 <Button Content="📏 Regla Métrica"
                                         Click="ToggleRuler_Click"
                                         Padding="12,6"
+                                        Margin="15,0,0,0"
                                         Background="#E1BEE7"
+                                        BorderThickness="0"
                                         Cursor="Hand"
                                         FontWeight="SemiBold"/>
                                 <CheckBox x:Name="ShowGuidesCheck"
@@ -39,28 +123,32 @@
                                           Margin="25,0,0,0"
                                           FontWeight="SemiBold"
                                           Click="ShowGuides_Click"/>
-                                <Button Content="💾 Guardar Escena"
+                                <Button Content="💾 Guardar"
                                         Click="Save_Click"
-                                        Padding="8,6"
+                                        Padding="10,6"
                                         Margin="25,0,0,0"
                                         Background="#C8E6C9"
-                                        Cursor="Hand"/>
-                                <Button Content="📂 Cargar Escena"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        FontWeight="SemiBold"/>
+                                <Button Content="📂 Cargar"
                                         Click="Load_Click"
-                                        Padding="8,6"
-                                        Margin="5,0,0,0"
+                                        Padding="10,6"
+                                        Margin="8,0,0,0"
                                         Background="#B3E5FC"
-                                        Cursor="Hand"/>
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        FontWeight="SemiBold"/>
                                 <TextBlock x:Name="MeasureLabel"
                                            Text=""
-                                           Foreground="Purple"
+                                           Foreground="#9C27B0"
                                            VerticalAlignment="Center"
                                            Margin="25,0,0,0"
                                            FontWeight="Bold"
                                            FontSize="13"/>
                                 <TextBlock x:Name="ModeLabel"
                                            Text="Modo: MOVER"
-                                           Foreground="DodgerBlue"
+                                           Foreground="#0288D1"
                                            VerticalAlignment="Center"
                                            Margin="35,0,0,0"
                                            FontSize="14"
@@ -70,8 +158,8 @@
 
                 <Grid Grid.Row="1"
                       Grid.Column="0"
-                      Background="#F4F4F4"
-                      Margin="0,0,5,0">
+                      Background="{DynamicResource PanelBg}"
+                      Margin="0,0,1,0">
                         <Grid.RowDefinitions>
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="240"/>
@@ -114,24 +202,28 @@
                                                         Padding="5,8"
                                                         Margin="0,4"
                                                         Background="#E0E0E0"
+                                                        BorderThickness="0"
                                                         FontWeight="SemiBold"/>
                                                 <Button Content="🌈 Añadir Espectro Completo"
                                                         Click="AddWhiteLight_Click"
                                                         Padding="5,8"
                                                         Margin="0,4"
-                                                        Background="#F0E6FA"
+                                                        Background="#F3E5F5"
+                                                        BorderThickness="0"
                                                         FontWeight="SemiBold"/>
                                                 <Button Content="💡 Añadir Lámpara Radial"
                                                         Click="AddLamp_Click"
                                                         Padding="5,8"
                                                         Margin="0,4"
                                                         Background="#FFF9C4"
+                                                        BorderThickness="0"
                                                         FontWeight="SemiBold"/>
                                                 <Button Content="橫 Añadir Haz Láser Paralelo"
                                                         Click="AddLaserBeam_Click"
                                                         Padding="5,8"
                                                         Margin="0,4"
                                                         Background="#FFCDD2"
+                                                        BorderThickness="0"
                                                         FontWeight="SemiBold"/>
                                         </StackPanel>
                                 </TabItem>
@@ -190,6 +282,7 @@
                                                         Click="AddSurface_Click"
                                                         Padding="10,8"
                                                         Background="#E0E0E0"
+                                                        BorderThickness="0"
                                                         FontWeight="Bold"/>
                                         </StackPanel>
                                 </TabItem>
@@ -199,32 +292,32 @@
                                   Header="Ecuaciones Físicas Aplicadas"
                                   Margin="8"
                                   Padding="5"
-                                  Background="White"
-                                  BorderBrush="LightGray">
+                                  Background="{DynamicResource WindowBg}"
+                                  BorderBrush="{DynamicResource BorderColor}">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <TextBlock x:Name="FormulasTextBlock"
                                                    TextWrapping="Wrap"
                                                    FontSize="11"
-                                                   FontFamily="Consolas"
-                                                   Foreground="#222222"/>
+                                                   FontFamily="Consolas"/>
                                 </ScrollViewer>
                         </GroupBox>
                 </Grid>
 
-                <Canvas x:Name="SimCanvas"
-                        Grid.Row="1"
+                <Border Grid.Row="1"
                         Grid.Column="1"
-                        Background="Transparent"
-                        ClipToBounds="True"
-                        MouseDown="Canvas_MouseDown"
-                        MouseMove="Canvas_MouseMove"
-                        MouseUp="Canvas_MouseUp"/>
+                        Background="{DynamicResource CanvasBg}"
+                        ClipToBounds="True">
+                        <Canvas x:Name="SimCanvas"
+                                MouseDown="Canvas_MouseDown"
+                                MouseMove="Canvas_MouseMove"
+                                MouseUp="Canvas_MouseUp"/>
+                </Border>
 
                 <Border Grid.Row="1"
                         Grid.Column="2"
-                        BorderBrush="LightGray"
+                        BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1,0,0,0"
-                        Background="#F8F8F8">
+                        Background="{DynamicResource PanelBg}">
                         <Grid>
                                 <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
@@ -241,8 +334,13 @@
                                           IsReadOnly="True"
                                           HeadersVisibility="Column"
                                           SelectionMode="Single"
-                                          RowBackground="White"
-                                          AlternatingRowBackground="#F2F2F2"
+                                          Background="{DynamicResource PanelBg}"
+                                          RowBackground="{DynamicResource PanelBg}"
+                                          AlternatingRowBackground="{DynamicResource WindowBg}"
+                                          Foreground="{DynamicResource TextFg}"
+                                          BorderBrush="{DynamicResource BorderColor}"
+                                          HorizontalGridLinesBrush="{DynamicResource BorderColor}"
+                                          VerticalGridLinesBrush="{DynamicResource BorderColor}"
                                           Margin="5"/>
                         </Grid>
                 </Border>

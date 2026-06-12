@@ -12,6 +12,6 @@ namespace UnfathomableMirrors.Models
         void MoveTo(Point newPos);
         void AimAwayFrom(Point target);
         void UpdateDimensions(double canvasWidth, double canvasHeight);
-        bool TryIntersect(Point rayOrigin, double rayAngleRad, out double t, out double nx, out double ny);
+        bool TryIntersect(Point rayOrigin, double rayDx, double rayDy, out double t, out double nx, out double ny);
     }
 }

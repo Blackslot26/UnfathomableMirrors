@@ -27,7 +27,6 @@ namespace UnfathomableMirrors.Models
 
         public bool IsMouseOver(Point mousePos)
         {
-            // Optimización: Multiplicación directa en lugar de Math.Pow
             double dx = mousePos.X - Position.X;
             double dy = mousePos.Y - Position.Y;
             return Math.Sqrt(dx * dx + dy * dy) <= Thickness;
@@ -40,16 +39,15 @@ namespace UnfathomableMirrors.Models
             C2 = new Point(Position.X - d * Math.Cos(Angle), Position.Y - d * Math.Sin(Angle));
         }
 
-        public bool TryIntersect(Point rayOrigin, double rayAngleRad, out double t, out double nx, out double ny)
+        public bool TryIntersect(Point rayOrigin, double rayDx, double rayDy, out double t, out double nx, out double ny)
         {
             t = -1; nx = 0; ny = 0;
-            double dx = Math.Cos(rayAngleRad), dy = Math.Sin(rayAngleRad);
 
             bool HitCircle(Point C, out double tin, out double tout)
             {
                 tin = tout = -1;
                 double ox = rayOrigin.X - C.X, oy = rayOrigin.Y - C.Y;
-                double b = 2 * (ox * dx + oy * dy);
+                double b = 2 * (ox * rayDx + oy * rayDy);
                 double c = ox * ox + oy * oy - Radius * Radius;
                 double disc = b * b - 4 * c;
                 if (disc < 0) return false;
@@ -68,7 +66,7 @@ namespace UnfathomableMirrors.Models
             {
                 double hitT = t_in > 0.001 ? t_in : t_out;
                 t = hitT;
-                Point hitP = new Point(rayOrigin.X + t * dx, rayOrigin.Y + t * dy);
+                Point hitP = new Point(rayOrigin.X + t * rayDx, rayOrigin.Y + t * rayDy);
                 Point hitC = (hitT == t1in || hitT == t1out) ? C1 : C2;
 
                 nx = (hitP.X - hitC.X) / Radius;

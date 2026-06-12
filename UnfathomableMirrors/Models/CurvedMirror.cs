@@ -26,7 +26,6 @@ namespace UnfathomableMirrors.Models
 
         public bool IsMouseOver(Point mousePos)
         {
-            // Optimización matemática
             double dx = mousePos.X - Position.X;
             double dy = mousePos.Y - Position.Y;
             return Math.Sqrt(dx * dx + dy * dy) <= 25;
@@ -39,53 +38,54 @@ namespace UnfathomableMirrors.Models
             MaxAngle = Math.Asin(Math.Max(0, Math.Min(cutDistanceY / Radius, 1)));
         }
 
-        public bool TryIntersect(Point rayOrigin, double rayAngleRad, out double t, out double nx, out double ny)
+        public bool TryIntersect(Point rayOrigin, double rayDx, double rayDy, out double t, out double nx, out double ny)
         {
             t = -1; nx = 0; ny = 0;
-            double cosA = Math.Cos(rayAngleRad), sinA = Math.Sin(rayAngleRad);
             double dx = rayOrigin.X - Center.X, dy = rayOrigin.Y - Center.Y;
-            double a = cosA * cosA + sinA * sinA;
-            double b = 2.0 * (dx * cosA + dy * sinA);
+            double a = rayDx * rayDx + rayDy * rayDy;
+            double b = 2.0 * (dx * rayDx + dy * rayDy);
             double c = (dx * dx + dy * dy) - (Radius * Radius);
 
             double discriminant = b * b - 4.0 * a * c;
             if (discriminant < 0) return false;
 
             double sqDisc = Math.Sqrt(discriminant);
-            double[] possibleTs = { (-b - sqDisc) / (2.0 * a), (-b + sqDisc) / (2.0 * a) };
+            double t1 = (-b - sqDisc) / (2.0 * a);
+            double t2 = (-b + sqDisc) / (2.0 * a);
+
             double minValidT = double.MaxValue;
             bool hit = false;
 
-            for (int i = 0; i < 2; i++)
-            {
-                if (possibleTs[i] > 0.001)
-                {
-                    double hitX = rayOrigin.X + possibleTs[i] * cosA;
-                    double hitY = rayOrigin.Y + possibleTs[i] * sinA;
-                    double hitAngle = Math.Atan2(hitY - Center.Y, hitX - Center.X);
-
-                    double expectedAngle = Angle + Math.PI;
-                    double angleDiff = hitAngle - expectedAngle;
-                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-
-                    if (Math.Abs(angleDiff) <= MaxAngle && possibleTs[i] < minValidT)
-                    {
-                        minValidT = possibleTs[i];
-                        hit = true;
-                    }
-                }
-            }
+            if (t1 > 0.001) CheckHit(t1, rayOrigin, rayDx, rayDy, ref minValidT, ref hit);
+            if (t2 > 0.001) CheckHit(t2, rayOrigin, rayDx, rayDy, ref minValidT, ref hit);
 
             if (hit)
             {
                 t = minValidT;
-                double hitX = rayOrigin.X + t * cosA, hitY = rayOrigin.Y + t * sinA;
+                double hitX = rayOrigin.X + t * rayDx, hitY = rayOrigin.Y + t * rayDy;
                 nx = hitX - Center.X; ny = hitY - Center.Y;
                 double len = Math.Sqrt(nx * nx + ny * ny);
                 nx /= len; ny /= len;
             }
             return hit;
+        }
+
+        private void CheckHit(double testT, Point rayOrigin, double rayDx, double rayDy, ref double minValidT, ref bool hit)
+        {
+            double hitX = rayOrigin.X + testT * rayDx;
+            double hitY = rayOrigin.Y + testT * rayDy;
+            double hitAngle = Math.Atan2(hitY - Center.Y, hitX - Center.X);
+
+            double expectedAngle = Angle + Math.PI;
+            double angleDiff = hitAngle - expectedAngle;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+
+            if (Math.Abs(angleDiff) <= MaxAngle && testT < minValidT)
+            {
+                minValidT = testT;
+                hit = true;
+            }
         }
     }
 }

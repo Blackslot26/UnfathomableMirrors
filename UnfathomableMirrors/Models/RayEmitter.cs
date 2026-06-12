@@ -49,10 +49,12 @@ namespace UnfathomableMirrors.Models
             {
                 double minT = double.MaxValue, bestNx = 0, bestNy = 0;
                 IOpticSurface hitSurface = null;
+                double rayDx = Math.Cos(currentAngle);
+                double rayDy = Math.Sin(currentAngle);
 
                 foreach (var surface in surfaces)
                 {
-                    if (surface.TryIntersect(currentPos, currentAngle, out double t, out double nx, out double ny))
+                    if (surface.TryIntersect(currentPos, rayDx, rayDy, out double t, out double nx, out double ny))
                     {
                         if (t < minT) { minT = t; bestNx = nx; bestNy = ny; hitSurface = surface; }
                     }
@@ -60,7 +62,6 @@ namespace UnfathomableMirrors.Models
 
                 if (hitSurface != null)
                 {
-                    double rayDx = Math.Cos(currentAngle), rayDy = Math.Sin(currentAngle);
                     double dotIN = rayDx * bestNx + rayDy * bestNy;
 
                     bool isEntering = dotIN < 0;
@@ -103,7 +104,7 @@ namespace UnfathomableMirrors.Models
                 }
                 else
                 {
-                    Segments.Add(new RaySegment { Start = currentPos, End = new Point(currentPos.X + MaxRayLength * Math.Cos(currentAngle), currentPos.Y + MaxRayLength * Math.Sin(currentAngle)), IsHitting = false });
+                    Segments.Add(new RaySegment { Start = currentPos, End = new Point(currentPos.X + MaxRayLength * rayDx, currentPos.Y + MaxRayLength * rayDy), IsHitting = false });
                     break;
                 }
             }

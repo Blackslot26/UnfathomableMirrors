@@ -42,11 +42,10 @@ namespace UnfathomableMirrors.Models
             Corners[3] = new Point(Position.X + hl * cosA + ht * sinA, Position.Y + hl * sinA - ht * cosA);
         }
 
-        public bool TryIntersect(Point rayOrigin, double rayAngleRad, out double t, out double nx, out double ny)
+        public bool TryIntersect(Point rayOrigin, double rayDx, double rayDy, out double t, out double nx, out double ny)
         {
             t = double.MaxValue; nx = 0; ny = 0;
             bool hit = false;
-            double rayDx = Math.Cos(rayAngleRad), rayDy = Math.Sin(rayAngleRad);
 
             for (int i = 0; i < 4; i++)
             {
