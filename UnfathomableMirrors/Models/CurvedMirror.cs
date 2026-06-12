@@ -26,7 +26,10 @@ namespace UnfathomableMirrors.Models
 
         public bool IsMouseOver(Point mousePos)
         {
-            return Math.Sqrt(Math.Pow(mousePos.X - Position.X, 2) + Math.Pow(mousePos.Y - Position.Y, 2)) <= 25;
+            // Optimización matemática
+            double dx = mousePos.X - Position.X;
+            double dy = mousePos.Y - Position.Y;
+            return Math.Sqrt(dx * dx + dy * dy) <= 25;
         }
 
         public void UpdateDimensions(double canvasWidth, double canvasHeight)
@@ -48,7 +51,8 @@ namespace UnfathomableMirrors.Models
             double discriminant = b * b - 4.0 * a * c;
             if (discriminant < 0) return false;
 
-            double[] possibleTs = { (-b - Math.Sqrt(discriminant)) / (2.0 * a), (-b + Math.Sqrt(discriminant)) / (2.0 * a) };
+            double sqDisc = Math.Sqrt(discriminant);
+            double[] possibleTs = { (-b - sqDisc) / (2.0 * a), (-b + sqDisc) / (2.0 * a) };
             double minValidT = double.MaxValue;
             bool hit = false;
 

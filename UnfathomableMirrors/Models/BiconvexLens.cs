@@ -27,7 +27,10 @@ namespace UnfathomableMirrors.Models
 
         public bool IsMouseOver(Point mousePos)
         {
-            return Math.Sqrt(Math.Pow(mousePos.X - Position.X, 2) + Math.Pow(mousePos.Y - Position.Y, 2)) <= Thickness;
+            // Optimización: Multiplicación directa en lugar de Math.Pow
+            double dx = mousePos.X - Position.X;
+            double dy = mousePos.Y - Position.Y;
+            return Math.Sqrt(dx * dx + dy * dy) <= Thickness;
         }
 
         public void UpdateDimensions(double canvasWidth, double canvasHeight)
