@@ -405,6 +405,7 @@ namespace UnfathomableMirrors.Views
             }
 
             PhysicsDataTable.ItemsSource = dataExport;
+            UpdateFormulasPanel(tieneReflexion, tieneRefraccion, tieneRIT);
         }
 
         private void UpdateFormulasPanel(bool reflek, bool refrak, bool rit)
