@@ -12,7 +12,8 @@ namespace UnfathomableMirrors.Models
         public bool IsHitting { get; set; }
         public Point NormalEnd { get; set; }
         public double IncidenceAngleDeg { get; set; }
-        public string ActionType { get; set; }
+        public double ResultingAngleDeg { get; set; }
+        public string? ActionType { get; set; }
     }
 
     public class RayEmitter
@@ -48,7 +49,8 @@ namespace UnfathomableMirrors.Models
             for (int bounce = 0; bounce < MaxBounces; bounce++)
             {
                 double minT = double.MaxValue, bestNx = 0, bestNy = 0;
-                IOpticSurface hitSurface = null;
+                IOpticSurface? hitSurface = null;
+
                 double rayDx = Math.Cos(currentAngle);
                 double rayDy = Math.Sin(currentAngle);
 
@@ -76,16 +78,25 @@ namespace UnfathomableMirrors.Models
                     }
 
                     double cosI = -(rayDx * actualNx + rayDy * actualNy);
+                    cosI = Math.Max(-1.0, Math.Min(1.0, cosI));
+                    double incidence = Math.Acos(cosI) * 180.0 / Math.PI;
+
                     double r = n1 / n2;
                     double sinT2 = r * r * (1.0 - cosI * cosI);
                     bool isTIR = hitSurface.IsRefractive && sinT2 > 1.0;
 
+                    double resultingAngle = incidence;
+                    if (hitSurface.IsRefractive && !isTIR)
+                    {
+                        double cosT = Math.Sqrt(Math.Max(0.0, 1.0 - sinT2));
+                        resultingAngle = Math.Acos(cosT) * 180.0 / Math.PI;
+                    }
+
                     Point hitPoint = new Point(currentPos.X + minT * rayDx, currentPos.Y + minT * rayDy);
                     Point normalTarget = new Point(hitPoint.X + actualNx * 60, hitPoint.Y + actualNy * 60);
-                    double incidence = Math.Acos(Math.Max(-1, Math.Min(1, cosI))) * 180.0 / Math.PI;
 
                     string action = !hitSurface.IsRefractive ? "Reflection" : (isTIR ? "TIR" : "Refraction");
-                    Segments.Add(new RaySegment { Start = currentPos, End = hitPoint, IsHitting = true, NormalEnd = normalTarget, IncidenceAngleDeg = incidence, ActionType = action });
+                    Segments.Add(new RaySegment { Start = currentPos, End = hitPoint, IsHitting = true, NormalEnd = normalTarget, IncidenceAngleDeg = incidence, ResultingAngleDeg = resultingAngle, ActionType = action });
 
                     if (!hitSurface.IsRefractive || isTIR)
                     {
@@ -95,11 +106,12 @@ namespace UnfathomableMirrors.Models
                     }
                     else
                     {
-                        double cosT = Math.Sqrt(1.0 - sinT2);
+                        double cosT = Math.Sqrt(Math.Max(0.0, 1.0 - sinT2));
                         double refrX = r * rayDx + (r * cosI - cosT) * actualNx;
                         double refrY = r * rayDy + (r * cosI - cosT) * actualNy;
                         currentAngle = Math.Atan2(refrY, refrX);
                     }
+
                     currentPos = hitPoint;
                 }
                 else

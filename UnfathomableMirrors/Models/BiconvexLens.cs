@@ -29,7 +29,7 @@ namespace UnfathomableMirrors.Models
         {
             double dx = mousePos.X - Position.X;
             double dy = mousePos.Y - Position.Y;
-            return Math.Sqrt(dx * dx + dy * dy) <= Thickness;
+            return Math.Sqrt(dx * dx + dy * dy) <= 15;
         }
 
         public void UpdateDimensions(double canvasWidth, double canvasHeight)
