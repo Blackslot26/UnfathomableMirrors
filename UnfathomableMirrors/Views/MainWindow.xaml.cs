@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using UnfathomableMirrors.Models;
 
 namespace UnfathomableMirrors.Views
@@ -41,6 +42,23 @@ namespace UnfathomableMirrors.Views
             Brushes.Cyan, Brushes.Magenta, Brushes.HotPink, Brushes.SpringGreen, Brushes.Gold
         };
 
+        private List<Line> linePool = new List<Line>();
+        private int lineIndex = 0;
+        private List<Polyline> polylinePool = new List<Polyline>();
+        private int polylineIndex = 0;
+        private List<TextBlock> textPool = new List<TextBlock>();
+        private int textIndex = 0;
+        private List<Path> pathPool = new List<Path>();
+        private int pathIndex = 0;
+        private List<Polygon> polygonPool = new List<Polygon>();
+        private int polygonIndex = 0;
+        private List<Ellipse> ellipsePool = new List<Ellipse>();
+        private int ellipseIndex = 0;
+        private List<Grid> nozzlePool = new List<Grid>();
+        private int nozzleIndex = 0;
+        private List<Grid> emitterUiPool = new List<Grid>();
+        private int emitterUiIndex = 0;
+
         private DrawingVisualHost drawingHost;
 
         public MainWindow()
@@ -60,6 +78,58 @@ namespace UnfathomableMirrors.Views
                 UpdateAndDraw();
             };
             SizeChanged += (s, e) => UpdateAndDraw();
+        }
+
+        private T GetPooledElement<T>(List<T> pool, ref int index) where T : UIElement, new()
+        {
+            if (index >= pool.Count)
+            {
+                var element = new T();
+                pool.Add(element);
+                SimCanvas.Children.Add(element);
+            }
+            var item = pool[index++];
+            item.Visibility = Visibility.Visible;
+            return item;
+        }
+
+        private Grid GetNozzle()
+        {
+            if (nozzleIndex >= nozzlePool.Count)
+            {
+                Grid nozzleUI = new Grid { Width = 14, Height = 10 };
+                nozzleUI.Children.Add(new Rectangle { Fill = Brushes.DarkSlateGray, Stroke = Brushes.Black, StrokeThickness = 1, RadiusX = 1, RadiusY = 1 });
+                nozzlePool.Add(nozzleUI);
+                SimCanvas.Children.Add(nozzleUI);
+            }
+            var item = nozzlePool[nozzleIndex++];
+            item.Visibility = Visibility.Visible;
+            return item;
+        }
+
+        private Grid GetEmitterUI()
+        {
+            if (emitterUiIndex >= emitterUiPool.Count)
+            {
+                Grid emitterUI = new Grid { Width = 30, Height = 20 };
+                emitterUI.Children.Add(new Rectangle { RadiusX = 3, RadiusY = 3 });
+                emitterUI.Children.Add(new TextBlock { Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold });
+                emitterUiPool.Add(emitterUI);
+                SimCanvas.Children.Add(emitterUI);
+            }
+            var item = emitterUiPool[emitterUiIndex++];
+            item.Visibility = Visibility.Visible;
+            return item;
+        }
+
+        private void AngleText_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is UIElement element) Canvas.SetZIndex(element, 999);
+        }
+
+        private void AngleText_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is UIElement element) Canvas.SetZIndex(element, 100);
         }
 
         private void ToggleTheme_Click(object sender, RoutedEventArgs e)
@@ -130,6 +200,12 @@ namespace UnfathomableMirrors.Views
         private void UpdateAndDraw()
         {
             if (SimCanvas == null || drawingHost == null) return;
+
+            lineIndex = 0; polylineIndex = 0; textIndex = 0; pathIndex = 0; polygonIndex = 0; ellipseIndex = 0; nozzleIndex = 0; emitterUiIndex = 0;
+            foreach (UIElement child in SimCanvas.Children)
+            {
+                if (child != drawingHost) child.Visibility = Visibility.Hidden;
+            }
 
             bool showGuides = ShowGuidesCheck?.IsChecked ?? false;
             var dataExport = new List<object>();
@@ -215,9 +291,22 @@ namespace UnfathomableMirrors.Views
 
                             if (showGuides) dc.DrawLine(new Pen(Brushes.Gray, 1) { DashStyle = DashStyles.Dash }, segment.End, segment.NormalEnd);
 
-                            FormattedText formatAngle = new FormattedText($"{Math.Round(segment.IncidenceAngleDeg, 1)}°", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-                            dc.DrawRectangle(tooltipBgBrush, null, new Rect(segment.End.X + 10, segment.End.Y - 20, formatAngle.Width + 6, formatAngle.Height + 6));
-                            dc.DrawText(formatAngle, new Point(segment.End.X + 13, segment.End.Y - 17));
+                            TextBlock angleText = GetPooledElement(textPool, ref textIndex);
+                            angleText.Text = $"{Math.Round(segment.IncidenceAngleDeg, 1)}°";
+                            angleText.Foreground = Brushes.White;
+                            angleText.Background = tooltipBgBrush;
+                            angleText.Padding = new Thickness(3);
+                            angleText.FontSize = 11;
+                            angleText.FontWeight = FontWeights.Bold;
+
+                            angleText.MouseEnter -= AngleText_MouseEnter;
+                            angleText.MouseEnter += AngleText_MouseEnter;
+                            angleText.MouseLeave -= AngleText_MouseLeave;
+                            angleText.MouseLeave += AngleText_MouseLeave;
+
+                            Canvas.SetLeft(angleText, segment.End.X + 10);
+                            Canvas.SetTop(angleText, segment.End.Y - 20);
+                            Canvas.SetZIndex(angleText, 100);
                         }
                     }
 
@@ -263,9 +352,16 @@ namespace UnfathomableMirrors.Views
 
                     if (MeasureLabel != null) MeasureLabel.Text = $"Regla: {Math.Round(distCm, 1)} cm";
 
-                    FormattedText formatCm = new FormattedText($"{Math.Round(distCm, 1)} cm", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-                    dc.DrawRectangle(Brushes.DeepSkyBlue, null, new Rect(p2.X + 12, p2.Y - 22, formatCm.Width + 8, formatCm.Height + 4));
-                    dc.DrawText(formatCm, new Point(p2.X + 16, p2.Y - 20));
+                    TextBlock floatingTooltip = GetPooledElement(textPool, ref textIndex);
+                    floatingTooltip.Text = $"{Math.Round(distCm, 1)} cm";
+                    floatingTooltip.Foreground = Brushes.White;
+                    floatingTooltip.Background = Brushes.DeepSkyBlue;
+                    floatingTooltip.Padding = new Thickness(4, 2, 4, 2);
+                    floatingTooltip.FontSize = 11;
+                    floatingTooltip.FontWeight = FontWeights.Bold;
+                    Canvas.SetLeft(floatingTooltip, p2.X + 12);
+                    Canvas.SetTop(floatingTooltip, p2.Y - 22);
+                    Canvas.SetZIndex(floatingTooltip, 120);
 
                     if (distPx > 5)
                     {
@@ -286,8 +382,16 @@ namespace UnfathomableMirrors.Views
 
                             if (esEnteroCm && cm > 0 && offsetPx < distPx - 15)
                             {
-                                FormattedText cmTick = new FormattedText($"{Math.Round(cm)} cm", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 9, Brushes.DeepSkyBlue, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-                                dc.DrawText(cmTick, new Point(tx + nx * 16 - 4, ty + ny * 16 - 5));
+                                TextBlock tickText = GetPooledElement(textPool, ref textIndex);
+                                tickText.Text = $"{Math.Round(cm)} cm";
+                                tickText.Foreground = Brushes.DeepSkyBlue;
+                                tickText.Background = Brushes.Transparent;
+                                tickText.Padding = new Thickness(0);
+                                tickText.FontSize = 9;
+                                tickText.FontWeight = FontWeights.Bold;
+                                Canvas.SetLeft(tickText, tx + nx * 16 - 8);
+                                Canvas.SetTop(tickText, ty + ny * 16 - 5);
+                                Canvas.SetZIndex(tickText, 100);
                             }
                         }
                     }
@@ -481,7 +585,20 @@ namespace UnfathomableMirrors.Views
         private void NumberValidation(object sender, TextCompositionEventArgs e) => e.Handled = !Regex.IsMatch(e.Text, "[0-9]");
         private void ShowGuides_Click(object sender, RoutedEventArgs e) => UpdateAndDraw();
         private void WavelengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (WavelengthLabel != null) WavelengthLabel.Text = $"{(int)WavelengthSlider.Value} nm"; }
-        private void Window_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.A) { isMovingMode = !isMovingMode; ModeLabel.Text = isMovingMode ? "Modo: MOVER (Tecla 'A')" : "Modo: APUNTAR (Tecla 'A')"; ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson; UpdateAndDraw(); } }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.A)
+            {
+                isMovingMode = !isMovingMode;
+                if (ModeLabel != null)
+                {
+                    ModeLabel.Text = isMovingMode ? "Modo: MOVER (Tecla 'A')" : "Modo: APUNTAR (Tecla 'A')";
+                    ModeLabel.Foreground = isMovingMode ? Brushes.DodgerBlue : Brushes.Crimson;
+                }
+                UpdateAndDraw();
+            }
+        }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
